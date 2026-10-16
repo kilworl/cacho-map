@@ -39,7 +39,7 @@ export default function Home() {
           <p className="small">Compatibilidad {r.compat}% · gustos {r.tagScore}% · lugares {r.placeScore}% ({r.shared} en común) · Qloo: {r.tastesA.map((t: any) => t.name).join(", ")} vs {r.tastesB.map((t: any) => t.name).join(", ")}{r.missing?.length ? ` · no reconocí: ${r.missing.join(", ")}` : ""}</p>
           <Map pins={r.pins} a={r.a} b={r.b} />
           <p className="small">🟢 coinciden · 🔴 solo uno lo escogería</p>
-          <ul className="zones">{r.zones.slice(0, 5).map((z: any) => <li key={z.zone}><b>{z.zone}</b>: {z.cachos}% de cachos ({z.n} lugares)</li>)}</ul>
+          <ul className="zones">{r.zones.slice(0, 5).map((z: any) => <li key={z.zone}><b>{z.zone}</b>: no coinciden en {z.cachos}% de sus lugares ({z.n})</li>)}</ul>
           <img src={`/api/card?${q}`} alt="Tarjeta para compartir" style={{ width: "100%", borderRadius: 16 }} />
           <a className="btn" href={wa} target="_blank" rel="noreferrer">Compartir por WhatsApp</a>
         </section>
