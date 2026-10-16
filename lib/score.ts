@@ -1,7 +1,7 @@
 import type { Place, Tag } from "./qloo";
 // Our own approximate neighborhood centroids (not Qloo data)
 export const ZONES: [string, number, number][] = [
-  ["Centro", 10.4236, -75.5513], ["Getsemaní", 10.4205, -75.5465], ["San Diego", 10.4278, -75.5480],
+  ["el Centro", 10.4236, -75.5513], ["Getsemaní", 10.4205, -75.5465], ["San Diego", 10.4278, -75.5480],
   ["Bocagrande", 10.3990, -75.5560], ["Castillogrande", 10.3920, -75.5490], ["Manga", 10.4130, -75.5370],
   ["Crespo", 10.4450, -75.5150], ["Pie de la Popa", 10.4200, -75.5300], ["La Boquilla", 10.4800, -75.4950],
   ["Barú / Islas", 10.2000, -75.6200], ["Resto de la ciudad", 10.3950, -75.4900],
