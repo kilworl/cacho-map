@@ -13,8 +13,7 @@ export async function POST(req: Request) {
     const [ra, rb] = [await resolve(split(body.a?.tastes)), await resolve(split(body.b?.tastes))];
     if (!ra.found.length || !rb.found.length) return NextResponse.json({ error: "No reconocí los gustos. Prueba con artistas, películas, series o libros.", missing: [...ra.missing, ...rb.missing] }, { status: 422 });
     const ia = ra.found.map((e) => e.id), ib = rb.found.map((e) => e.id);
-    const tags = await compare(ia, ib);
-    const pa = await places(ia); const pb = await places(ib);
+    const [tags, pa, pb] = await Promise.all([compare(ia, ib), places(ia), places(ib)]);
     const r = score(tags, pa, pb);
     let out, steps: string[] = [], agent = "llm";
     try { const x = await roast(a, b, ra.found.map((e) => e.name), rb.found.map((e) => e.name), r); out = x.roast; steps = x.steps; if (!out?.roast_es) throw 0; }

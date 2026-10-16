@@ -34,12 +34,15 @@ export async function roast(a: string, b: string, ta: string[], tb: string[], r:
 Escribe un roast corto (máx 60 palabras), juguetón y cariñoso sobre la compatibilidad de GUSTOS de la pareja, mencionando el PORCENTAJE_GENERAL_DE_CACHOS (exactamente ${r.cachos}%) y una zona real de Cartagena y un lugar concreto.
 "Cachos" es una broma sobre gustos incompatibles, NUNCA una acusación real de infidelidad.
 Prohibido: cuerpo, sexualidad, raza, religión, política, insultos, groserías, mencionar terceras personas reales, hablar mal de un negocio.
-titulo: debe empezar exactamente con "${r.cachos}% de cachos" y puede nombrar la peor zona (ej: "${r.cachos}% de cachos, y el Centro es zona roja"). NUNCA uses el porcentaje de una zona como si fuera el general; si mencionas una cifra de zona, rotúlala claramente (ej: "en Getsemaní no coinciden en 80% de los lugares"). Responde rápido: llama getCompatibility, getZoneClashes y getPlaces una vez cada una. roast_en: traducción natural al inglés. plan_juntos_es: un plan en un lugar donde ambos coinciden.`,
+titulo: debe empezar exactamente con "${r.cachos}% de cachos" y puede nombrar la peor zona (ej: "${r.cachos}% de cachos, y el Centro es zona roja"). NUNCA uses el porcentaje de una zona como si fuera el general; si mencionas una cifra de zona, rotúlala claramente (ej: "en Getsemaní no coinciden en 80% de los lugares"). Las cifras de zona SOLO se pueden decir como desacuerdo de esa zona (ej: "en Manga no coinciden en el 60% de sus lugares"). PROHIBIDO decir "probabilidad", "chance", "posibilidad" o "probability" con cualquier porcentaje. Usa solo nombres reales de barrios que te den las herramientas. Responde rápido: llama getCompatibility, getZoneClashes y getPlaces una vez cada una. roast_en: traducción natural al inglés. plan_juntos_es: un plan en un lugar donde ambos coinciden.`,
     prompt: `Persona A: "${a}" le gusta: ${ta.join(", ")}. Persona B: "${b}" le gusta: ${tb.join(", ")}.`,
     onStepEnd: (s: any) => { for (const c of s.toolCalls || []) steps.push(c.toolName); },
   } as any);
   const out = (res as any).output as RoastT;
   const pct = `${r.cachos}%`;
+  const bad = /probabilidad|posibilidad|chance|probabilit|likelihood|odds|resto de la ciudad/i;
+  const scrub = (t: string) => t.split(/(?<=[.!?¡])\s+/).filter((x) => !bad.test(x)).join(" ").trim();
+  if (out) { out.titulo = bad.test(out.titulo) ? "" : out.titulo; out.roast_es = scrub(out.roast_es); out.roast_en = scrub(out.roast_en); out.plan_juntos_es = scrub(out.plan_juntos_es); }
   if (out && !out.titulo.startsWith(pct)) out.titulo = `${pct} de cachos` + (r.zones[0] ? `, zona roja: ${r.zones[0].zone}` : "");
   if (out && !out.roast_es.includes(pct)) out.roast_es = `${pct} de cachos. ` + out.roast_es;
   if (out && !out.roast_en.includes(pct)) out.roast_en = `${pct} taste-clash. ` + out.roast_en;

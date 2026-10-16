@@ -2,14 +2,17 @@ import type { Place, Tag } from "./qloo";
 // Our own approximate neighborhood centroids (not Qloo data)
 export const ZONES: [string, number, number][] = [
   ["el Centro", 10.4236, -75.5513], ["Getsemaní", 10.4205, -75.5465], ["San Diego", 10.4278, -75.5480],
-  ["Bocagrande", 10.3990, -75.5560], ["Castillogrande", 10.3920, -75.5490], ["Manga", 10.4130, -75.5370],
-  ["Crespo", 10.4450, -75.5150], ["Pie de la Popa", 10.4200, -75.5300], ["La Boquilla", 10.4800, -75.4950],
-  ["Barú / Islas", 10.2000, -75.6200], ["Resto de la ciudad", 10.3950, -75.4900],
+  ["Bocagrande", 10.3990, -75.5560], ["Castillogrande", 10.3920, -75.5490], ["El Laguito", 10.3960, -75.5640],
+  ["Manga", 10.4130, -75.5370], ["Marbella", 10.4370, -75.5380], ["El Cabrero", 10.4330, -75.5440],
+  ["Crespo", 10.4450, -75.5150], ["Pie de la Popa", 10.4200, -75.5300], ["Torices", 10.4330, -75.5300],
+  ["El Bosque", 10.4020, -75.5150], ["La Boquilla", 10.4800, -75.4950], ["Zona Norte", 10.5150, -75.4800],
+  ["Tierra Bomba", 10.3700, -75.5800], ["Barú", 10.2000, -75.6200], ["Turbaco", 10.3300, -75.4100],
+  ["Mamonal", 10.3300, -75.5000],
 ];
 export function zoneOf(lat: number, lon: number) {
   let best = ZONES[0][0], bd = Infinity;
   for (const [n, a, o] of ZONES) { const d = (lat - a) ** 2 + (lon - o) ** 2; if (d < bd) { bd = d; best = n; } }
-  return bd > 0.0016 && best !== "Barú / Islas" ? "Resto de la ciudad" : best;
+  return best;
 }
 export type Pin = { name: string; lat: number; lon: number; who: "both" | "a" | "b"; zone: string };
 export function score(tags: Tag[], pa: Place[], pb: Place[]) {
