@@ -6,7 +6,7 @@ const CORNY_OPENER = /^\s*(¡\s*)?(ay+|oye|vaya|bueno|uy|wow|oh|well)\b[,!.\s]*/
 
 /** Slang tacked on as a lone word at the end ("…, eche.") reads forced; drop it. */
 const SLANG = "(?:eche|ajá|aja|qué nota|que nota|no joda)";
-const TRAILING_SLANG = new RegExp(`(?:(?<=\\p{L})[,;]|(?<=[.?]))\\s*${SLANG}\\s*\\.?\\s*$`, "iu");
+const TRAILING_SLANG = new RegExp(`(?:(?<=\\p{L})[,;]|(?<=[.?]))\\s*(?:${SLANG}[,\\s]*)+\\.?\\s*$`, "iu");
 
 /** Slang used as a filler opener ("Eche, no son…") also reads forced. */
 const LEADING_SLANG = new RegExp(`(^|[.?]\\s+)${SLANG},\\s*(\\p{L})`, "giu");
