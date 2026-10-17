@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   }
   const { a, b, city, lang } = parsed.data;
   try {
-    const result = await runMatch({ a: { nick: a.nick || "A", tastes: a.tastes }, b: { nick: b.nick || "B", tastes: b.tastes }, city, lang });
+    const result = await runMatch({ a: { nick: a.nick || "A", tastes: a.tastes, pronoun: a.pronoun }, b: { nick: b.nick || "B", tastes: b.tastes, pronoun: b.pronoun }, city, lang });
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof NoTastesError) return NextResponse.json({ error: "no_tastes", missing: e.missing }, { status: 422 });

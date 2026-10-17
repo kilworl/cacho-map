@@ -2,11 +2,12 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { Lang, Pin, ScoreResult, ZoneStat } from "../types";
 import { normalizeModelId } from "./model";
+import { fixGender, pronounHint, type Person } from "./gender";
 import { ambience, placeType, priceSigns } from "../i18n/placeTypes";
 
 /** How many zones / places get an LLM-phrased description. */
 export const ZONES_TO_DESCRIBE = 5;
-export const PLACES_TO_DESCRIBE = 32;
+export const PLACES_TO_DESCRIBE = 26;
 
 const Schema = z.object({
   zones: z.array(z.object({ zone: z.string(), description: z.string(), why: z.string() })),
@@ -16,6 +17,8 @@ const Schema = z.object({
 interface Ctx {
   a: string;
   b: string;
+  pa: Person;
+  pb: Person;
   tastesA: string[];
   tastesB: string[];
   lang: Lang;
@@ -39,7 +42,7 @@ export function templateZone(z: ZoneStat, { a, b, lang }: Ctx): { description: s
     ? es ? `Zona segura: ${z.both} de ${z.n} lugares les gustan a los dos, aquí salen juntos.` : `Safe zone: ${z.both} of ${z.n} places suit both, so they'd go together.`
     : z.a && z.b
       ? es ? `Peligro: ${a} vendría a ${ex("onlyA")} y ${b} a ${ex("onlyB")}, cada uno por su lado.` : `Danger: ${a} would come for ${ex("onlyA")} and ${b} for ${ex("onlyB")}, each on their own.`
-      : es ? `Peligro: casi todo aquí es para ${z.a ? a : b}${ex(z.a ? "onlyA" : "onlyB") ? ` (como ${ex(z.a ? "onlyA" : "onlyB")})` : ""}; el otro no vendría.` : `Danger: almost everything here is for ${z.a ? a : b}${ex(z.a ? "onlyA" : "onlyB") ? ` (like ${ex(z.a ? "onlyA" : "onlyB")})` : ""}; the other wouldn't come.`;
+      : es ? `Peligro: casi todo aquí es para ${z.a ? a : b}${ex(z.a ? "onlyA" : "onlyB") ? ` (como ${ex(z.a ? "onlyA" : "onlyB")})` : ""}; la otra persona no vendría.` : `Danger: almost everything here is for ${z.a ? a : b}${ex(z.a ? "onlyA" : "onlyB") ? ` (like ${ex(z.a ? "onlyA" : "onlyB")})` : ""}; the other wouldn't come.`;
   return { description, why };
 }
 
@@ -85,18 +88,18 @@ export function pickZones(r: ScoreResult): ZoneStat[] {
 }
 
 const system = (ctx: Ctx) => `You write short, factual copy for a couples' map app, in ${ctx.lang === "es" ? "neutral Colombian Spanish" : "English"}.
-Person A is "${ctx.a}" (likes ${ctx.tastesA.join(", ")}), person B is "${ctx.b}" (likes ${ctx.tastesB.join(", ")}).
+Person A is ${pronounHint(ctx.pa, ctx.lang)}, likes ${ctx.tastesA.join(", ")}. Person B is ${pronounHint(ctx.pb, ctx.lang)}, likes ${ctx.tastesB.join(", ")}.
 STRICT RULE: use ONLY the facts in the JSON. Never invent places, foods, prices, history or vibes that are not listed. If a field is empty or null, don't mention it at all (never say something is "not specified"). Attribute a cuisine or type to a place only if that place's own fields list it.
 For each zone:
 - "description" (max 20 words): what the area is like (what kind of places, food, vibe, price), from place_types, cuisines, ambience, price. Don't mention the couple or the zone kind here.
 - "why" (max 22 words): kind "danger": name one example (exact name) liked by only ONE of them and say that person would end up going alone (playful "cacho"/cheating risk). Never say the other would join them there. kind "safe": name one example (exact name) liked_by "both" and say they'd go together. Never use generic phrases like "a pizza place" instead of the name. Don't say "danger zone"/"safe zone" literally.
 For each place: "summary" (max 14 words): what it is, from types/cuisines/qloo_description (translated), without repeating the place name. "plan" (max 12 words): a concrete thing to do there, matching its type.
-Gender: use the person's name; avoid gendered adjectives ("solo/sola") unless the name is clearly one gender.
+Respect each person's pronoun. Neutral: no gendered adjectives (${ctx.lang === "es" ? '"se iría sin compañía", never "solo/sola"' : 'use the name or "they"'}).
 ALL output text must be in ${ctx.lang === "es" ? "Spanish (translate qloo_description and tags to Spanish)" : "English"}.
 No exclamation marks, no emojis. Keep the same zone names and place ids.`;
 
 /** LLM-phrased zone + place descriptions grounded in Qloo data; falls back to templates. */
-export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 11_000): Promise<ScoreResult> {
+export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 12_000): Promise<ScoreResult> {
   const f = facts(r, ctx);
   const call = async (payload: object): Promise<Partial<z.infer<typeof Schema>>> => {
     try {
@@ -117,12 +120,8 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 11_000): Pr
     }
   };
   // Smaller calls in parallel are much faster than one big one (output length dominates latency).
-  const half = Math.ceil(f.places.length / 2);
-  const parts = await Promise.all([
-    call({ zones: f.zones, places: [] }),
-    call({ zones: [], places: f.places.slice(0, half) }),
-    call({ zones: [], places: f.places.slice(half) }),
-  ]);
+  // Fewer concurrent calls: the free tier throttles bursts (agent + judge run at the same time).
+  const parts = await Promise.all([call({ zones: f.zones, places: [] }), call({ zones: [], places: f.places })]);
   const out = { zones: parts.flatMap((p) => p.zones ?? []), places: parts.flatMap((p) => p.places ?? []) };
   const clean = (s?: string, name?: string) => {
     let t = s?.replace(/[!¡]/g, "").trim();
@@ -135,12 +134,14 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 11_000): Pr
     zones: r.zones.map((z) => {
       const t = templateZone(z, ctx);
       const llm = described.has(z.zone) ? out.zones.find((x) => x.zone === z.zone) : undefined;
-      return { ...z, description: clean(llm?.description) ?? t.description, why: clean(llm?.why) ?? t.why };
+      const why = clean(llm?.why) && fixGender(clean(llm?.why)!, [ctx.pa, ctx.pb], ctx.lang);
+      return { ...z, description: clean(llm?.description) ?? t.description, why: why || t.why };
     }),
     pins: r.pins.map((p) => {
       const t = templatePlace(p, ctx.lang);
       const llm = out.places.find((x) => x.id === p.id);
-      return { ...p, summary: clean(llm?.summary, p.name) ?? t.summary, plan: clean(llm?.plan) ?? t.plan };
+      const plan = clean(llm?.plan) && fixGender(clean(llm?.plan)!, [ctx.pa, ctx.pb], ctx.lang);
+      return { ...p, summary: clean(llm?.summary, p.name) ?? t.summary, plan: plan || t.plan };
     }),
   };
 }

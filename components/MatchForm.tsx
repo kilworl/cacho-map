@@ -2,16 +2,21 @@
 import ClickSpark from "./reactbits/ClickSpark";
 import { useI18n } from "@/lib/i18n/LangProvider";
 
+import type { Pronoun } from "@/lib/types";
+
 export interface FormValues {
   an: string;
   at: string;
+  ap: Pronoun;
   bn: string;
   bt: string;
+  bp: Pronoun;
   consent: boolean;
 }
 
-export const EMPTY_FORM: FormValues = { an: "", at: "", bn: "", bt: "", consent: false };
-const EXAMPLE: FormValues = { an: "Caro", at: "Mentalista, videojuegos, superhéroes, Rápido y furioso", bn: "Dani", bt: "Taylor Swift, Gilmore Girls, Harry Potter, comida mexicana", consent: true };
+export const EMPTY_FORM: FormValues = { an: "", at: "", ap: "n", bn: "", bt: "", bp: "n", consent: false };
+const EXAMPLE: FormValues = { an: "Caro", at: "Mentalista, videojuegos, superhéroes, Rápido y furioso", ap: "f", bn: "Dani", bt: "Taylor Swift, Gilmore Girls, Harry Potter, comida mexicana", bp: "n", consent: true };
+const PRONOUNS: Pronoun[] = ["n", "f", "m"];
 
 /** Appends a suggestion to a comma-separated list, skipping duplicates. */
 const addTaste = (list: string, item: string) => {
@@ -28,10 +33,10 @@ interface Props {
 
 export function MatchForm({ values: f, onChange, onSubmit, busy }: Props) {
   const { t } = useI18n();
-  const set = (k: keyof FormValues, v: string | boolean) => onChange({ ...f, [k]: v });
+  const set = (k: keyof FormValues, v: string | boolean | Pronoun) => onChange({ ...f, [k]: v });
   const players = [
-    { side: "a", label: t.personA, nick: "an", tastes: "at", nickPh: t.nickA, tastesPh: t.tastesA, ideas: t.suggestionsA },
-    { side: "b", label: t.personB, nick: "bn", tastes: "bt", nickPh: t.nickB, tastesPh: t.tastesB, ideas: t.suggestionsB },
+    { side: "a", label: t.personA, nick: "an", tastes: "at", pron: "ap", nickPh: t.nickA, tastesPh: t.tastesA, ideas: t.suggestionsA },
+    { side: "b", label: t.personB, nick: "bn", tastes: "bt", pron: "bp", nickPh: t.nickB, tastesPh: t.tastesB, ideas: t.suggestionsB },
   ] as const;
   return (
     <form
@@ -50,7 +55,16 @@ export function MatchForm({ values: f, onChange, onSubmit, busy }: Props) {
         {players.map((p, i) => (
           <fieldset key={p.side} className={`player player--${p.side}`}>
             <legend>{p.label}</legend>
-            <input required maxLength={24} placeholder={p.nickPh} value={f[p.nick]} onChange={(e) => set(p.nick, e.target.value)} aria-label={p.nickPh} />
+            <div className="nick-row">
+              <input required maxLength={24} placeholder={p.nickPh} value={f[p.nick]} onChange={(e) => set(p.nick, e.target.value)} aria-label={p.nickPh} />
+              <div className="pronoun" role="radiogroup" aria-label={t.pronounLabel}>
+                {PRONOUNS.map((pr) => (
+                  <button key={pr} type="button" role="radio" aria-checked={f[p.pron] === pr} className={f[p.pron] === pr ? "on" : ""} onClick={() => set(p.pron, pr)}>
+                    {t.pronouns[pr]}
+                  </button>
+                ))}
+              </div>
+            </div>
             <textarea required rows={3} maxLength={400} placeholder={p.tastesPh} value={f[p.tastes]} onChange={(e) => set(p.tastes, e.target.value)} aria-label={`${p.label}: ${t.tastesHint}`} />
             <div className="chips" aria-label={t.suggest}>
               <span>{t.suggest}</span>

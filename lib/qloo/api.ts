@@ -175,3 +175,17 @@ export async function compareTastes(a: Signals, b: Signals): Promise<SharedTag[]
     b: names(t.query?.["b.signal.interests.entities"]),
   }));
 }
+
+/** Unrelated tastes used to learn which places Qloo recommends to almost anyone in a city. */
+const PROBES: TasteQuery[] = [
+  { input: "The Lion King", kind: "title", query: "The Lion King", type: "movie" },
+  { input: "Ludwig van Beethoven", kind: "title", query: "Ludwig van Beethoven", type: "artist" },
+  { input: "MasterChef", kind: "title", query: "MasterChef", type: "tv_show" },
+  { input: "The Great Gatsby", kind: "title", query: "The Great Gatsby", type: "book" },
+];
+
+/** Place lists for the probe tastes near a point (cached like every Qloo call). */
+export async function probeLists(at: GeoPoint): Promise<Place[][]> {
+  const { found } = await resolveTastes(PROBES);
+  return Promise.all(found.map((e) => placesNear({ entities: [e.id], tags: [] }, at).catch(() => [])));
+}

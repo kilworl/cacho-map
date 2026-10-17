@@ -5,12 +5,14 @@ const tastes = z.string().max(400).transform((s) =>
   s.split(/[,\n;]/).map((x) => x.replace(/[<>]/g, "").trim().slice(0, 60)).filter(Boolean),
 );
 
+const pronoun = z.enum(["m", "f", "n"]).default("n");
+
 /** Request body of POST /api/match. */
 export const MatchRequest = z.object({
   consent: z.literal(true),
   lang: z.enum(["es", "en"]).default("es"),
-  a: z.object({ nick, tastes }),
-  b: z.object({ nick, tastes }),
+  a: z.object({ nick, tastes, pronoun }),
+  b: z.object({ nick, tastes, pronoun }),
   city: z.object({
     name: z.string().max(60).transform((s) => s.replace(/[<>]/g, "").trim() || "?"),
     country: z.string().max(60).optional(),

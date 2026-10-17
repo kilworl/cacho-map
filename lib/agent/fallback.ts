@@ -1,8 +1,11 @@
 import type { Lang, Roast, ScoreResult } from "../types";
 import { pctLabel } from "./prompt";
+import type { Person } from "./gender";
 
 /** Template roast used when the LLM is unavailable. Still data-driven and on-brand (light cacho wordplay). */
-export function fallbackRoast(a: string, b: string, r: ScoreResult, lang: Lang): Roast {
+export function fallbackRoast(pa: Person, pb: Person, r: ScoreResult, lang: Lang): Roast {
+  const a = pa.nick;
+  const b = pb.nick;
   const label = pctLabel(r.risk, lang);
   const danger = r.zones.find((z) => z.kind === "danger")?.zone;
   const name = (who: "a" | "b" | "both") => r.pins.find((p) => p.who === who)?.name.replace(/[.\s]+$/, "");

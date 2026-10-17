@@ -1,4 +1,7 @@
 /** Shared domain types. Kept framework-free so they can be used by server, client and tests. */
+/** Pronoun chosen per person: él/he, ella/she, neutral (elle/they). */
+export type Pronoun = "m" | "f" | "n";
+
 export type Lang = "es" | "en";
 export type Who = "both" | "a" | "b";
 
@@ -164,5 +167,9 @@ export interface MatchResult extends ScoreResult {
   toolCalls: string[];
   /** Roast candidates with judge totals (-1 = dropped as nonsense/unsafe). */
   judged?: { roast: string; total: number; dropped: boolean }[];
+  pronounA?: Pronoun;
+  pronounB?: Pronoun;
+  /** How many "popular for anyone" places were left out of the comparison. */
+  popularRemoved?: number;
   timings: Record<string, number>;
 }

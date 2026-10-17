@@ -31,7 +31,7 @@ export function CachoApp() {
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ consent: form.consent, lang, city, a: { nick: form.an, tastes: form.at }, b: { nick: form.bn, tastes: form.bt } }),
+        body: JSON.stringify({ consent: form.consent, lang, city, a: { nick: form.an, tastes: form.at, pronoun: form.ap }, b: { nick: form.bn, tastes: form.bt, pronoun: form.bp } }),
       });
       const data = await res.json();
       if (!res.ok) setState({ kind: "error", code: (data.error as ErrorCode) in t.errors ? data.error : "busy" });

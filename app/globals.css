@@ -236,3 +236,10 @@ html { scroll-behavior: smooth; scroll-padding-top: calc(var(--topbar) + 12px); 
 .foot { border-top: var(--line); padding: 16px 20px; font-size: 0.8rem; color: var(--ink-2); text-align: center; }
 .share-page { max-width: 480px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 16px; }
 .share-page img { width: 100%; border: var(--line); border-radius: var(--radius); box-shadow: var(--hard); }
+
+.nick-row { display: flex; gap: 8px; align-items: stretch; }
+.nick-row input { flex: 1; min-width: 0; }
+.pronoun { display: flex; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; background: var(--paper-2); flex-shrink: 0; }
+.pronoun button { border: 0; background: transparent; padding: 0 10px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; min-height: 40px; }
+.pronoun button + button { border-left: 2px solid var(--ink); }
+.pronoun button.on { background: var(--ink); color: var(--paper); }

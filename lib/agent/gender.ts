@@ -1,0 +1,73 @@
+import type { Lang, Pronoun } from "../types";
+
+export interface Person {
+  nick: string;
+  pronoun: Pronoun;
+}
+
+/** How to describe a person's pronoun inside an LLM prompt. */
+export function pronounHint(p: Person, lang: Lang): string {
+  if (lang === "es") {
+    return p.pronoun === "m" ? `${p.nick} (él: usa masculino)` : p.pronoun === "f" ? `${p.nick} (ella: usa femenino)` : `${p.nick} (neutro: sin adjetivos con género, p. ej. "se iría sin compañía", nunca "solo/sola")`;
+  }
+  return p.pronoun === "m" ? `${p.nick} (he/him)` : p.pronoun === "f" ? `${p.nick} (she/her)` : `${p.nick} (they/them: use the name or "they")`;
+}
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const sentences = (t: string) => t.split(/(?<=[.!?…])\s+/).filter(Boolean);
+
+/** Verb + "solo/sola" = "alone" (not the adverb "solo" = only). */
+const ALONE = /\b((?:se\s+)?(?:iría|irá|va|iba|vaya|fue|sale|saldría|salió|sale|queda|quedaría|quedó|termina|terminaría|terminó|anda|andaría|está|estaría|estará|vendría|viene|llega|llegaría))\s+(solo|sola|solito|solita)\b/giu;
+const ES_GENDERED: [RegExp, string, string][] = [
+  // masc, fem pairs for common adjectives about a person
+  [/\b(enamorad[oa])\b/giu, "enamorado", "enamorada"],
+  [/\b(celos[oa])\b/giu, "celoso", "celosa"],
+  [/\b(aburrid[oa])\b/giu, "aburrido", "aburrida"],
+  [/\b(perdid[oa])\b/giu, "perdido", "perdida"],
+  [/\b(experto|experta)\b/giu, "experto", "experta"],
+];
+
+/** Name of the person most recently mentioned before `index` in `s`. */
+function subjectAt(s: string, index: number, people: Person[]): Person | undefined {
+  let best: { p: Person; at: number } | undefined;
+  for (const p of people) {
+    const re = new RegExp(`\\b${esc(p.nick)}\\b`, "giu");
+    for (const m of s.matchAll(re)) if (m.index! < index && (!best || m.index! > best.at)) best = { p, at: m.index! };
+  }
+  return best?.p;
+}
+
+/**
+ * Fixes or drops sentences whose gendered forms don't match the chosen pronouns.
+ * ES: "Caro iría sola" → "sola"/"solo"/"sin compañía" per Caro's pronoun; other gendered
+ * adjectives are fixed for él/ella and the sentence is dropped for neutral. Pronouns
+ * ("él"/"ella", "he"/"she") nobody uses drop the sentence.
+ */
+export function fixGender(text: string, people: Person[], lang: Lang): string {
+  const has = (g: Pronoun) => people.some((p) => p.pronoun === g);
+  const out: string[] = [];
+  for (let s of sentences(text)) {
+    if (lang === "es") {
+      if ((/\bél\b/iu.test(s) && !has("m")) || (/\bella\b/iu.test(s) && !has("f"))) continue;
+      s = s.replace(ALONE, (m, verb: string, _adj: string, off: number) => {
+        const p = subjectAt(s, off, people);
+        if (!p) return m;
+        return `${verb} ${p.pronoun === "m" ? "solo" : p.pronoun === "f" ? "sola" : "sin compañía"}`;
+      });
+      let drop = false;
+      for (const [re, masc, fem] of ES_GENDERED) {
+        s = s.replace(re, (m, _w: string, off: number) => {
+          const p = subjectAt(s, off, people);
+          if (!p) return m;
+          if (p.pronoun === "n") drop = true;
+          return p.pronoun === "m" ? masc : p.pronoun === "f" ? fem : m;
+        });
+      }
+      if (drop) continue;
+    } else {
+      if ((/\b(he|him|his|himself)\b/i.test(s) && !has("m")) || (/\b(she|her|hers|herself)\b/i.test(s) && !has("f"))) continue;
+    }
+    out.push(s);
+  }
+  return out.join(" ").trim();
+}
