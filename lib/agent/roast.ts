@@ -21,10 +21,11 @@ interface RoastInput {
   score: ScoreResult;
   lang: Lang;
   city: string;
+  signal?: AbortSignal;
 }
 
 /** Runs the tool-calling agent (Vercel AI Gateway) and enforces the humor contract on its output. */
-export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city }: RoastInput): Promise<{ roast: Roast; toolCalls: string[] }> {
+export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city, signal }: RoastInput): Promise<{ roast: Roast; toolCalls: string[] }> {
   const toolCalls: string[] = [];
   const res = await generateText({
     model: process.env.AI_MODEL || DEFAULT_MODEL,
@@ -34,6 +35,7 @@ export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city 
     system: systemPrompt(score.cachos, lang, city),
     prompt: userPrompt(a, b, tastesA, tastesB, lang),
     temperature: 0.9,
+    abortSignal: signal,
     providerOptions: { google: { thinkingConfig: { thinkingBudget: 512 } } },
     onStepEnd: (step: { toolCalls?: { toolName: string }[] }) => {
       for (const c of step.toolCalls ?? []) toolCalls.push(c.toolName);

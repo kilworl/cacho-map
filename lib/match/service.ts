@@ -5,6 +5,8 @@ import { score } from "../scoring/score";
 import { generateRoast } from "../agent/roast";
 import { fallbackRoast } from "../agent/fallback";
 
+const AGENT_TIMEOUT_MS = 14_000;
+
 export interface MatchInput {
   a: { nick: string; tastes: string[] };
   b: { nick: string; tastes: string[] };
@@ -41,10 +43,16 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   let roast;
   let toolCalls: string[] = [];
   let agent: MatchResult["agent"] = "llm";
+  const input = { a: a.nick, b: b.nick, tastesA: ra.found.map((e) => e.name), tastesB: rb.found.map((e) => e.name), score: s, lang, city: city.name };
   try {
-    ({ roast, toolCalls } = await generateRoast({
-      a: a.nick, b: b.nick, tastesA: ra.found.map((e) => e.name), tastesB: rb.found.map((e) => e.name), score: s, lang, city: city.name,
-    }));
+    // One quick retry for transient gateway errors; hard cap so the user never waits on a stuck model.
+    try {
+      ({ roast, toolCalls } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
+    } catch (e) {
+      if (Date.now() - t2 > AGENT_TIMEOUT_MS / 2) throw e;
+      console.warn("agent retry:", (e as Error).message);
+      ({ roast, toolCalls } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
+    }
   } catch (e) {
     console.error("agent failed, using fallback:", (e as Error).message);
     roast = fallbackRoast(a.nick, b.nick, s, lang);

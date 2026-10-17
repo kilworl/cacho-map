@@ -5,9 +5,10 @@ import { pctLabel } from "./prompt";
 export function fallbackRoast(a: string, b: string, r: ScoreResult, lang: Lang): Roast {
   const label = pctLabel(r.cachos, lang);
   const zone = r.zones[0]?.zone;
-  const onlyA = r.pins.find((p) => p.who === "a")?.name;
-  const onlyB = r.pins.find((p) => p.who === "b")?.name;
-  const both = r.pins.find((p) => p.who === "both")?.name;
+  const name = (who: "a" | "b" | "both") => r.pins.find((p) => p.who === who)?.name.replace(/[.\s]+$/, "");
+  const onlyA = name("a");
+  const onlyB = name("b");
+  const both = name("both");
   if (lang === "es") {
     return {
       title: zone ? `${label} · la pelea es en ${zone}` : label,
