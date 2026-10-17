@@ -59,11 +59,16 @@ export function CachoApp() {
         <section className="panel">
           {state.kind !== "done" && (
             <div className="hero">
-              <h1>
-                {lang === "es" ? <>¿Cuántos <em>cachos</em> le ponen a sus gustos?</> : <>How hard do you <em>cheat</em> on each other&apos;s taste?</>}
-              </h1>
               <p className="tagline"><ShinyText text={t.tagline} color="#5b4a3c" shineColor="#ff3b1f" speed={4} /></p>
+              <h1>
+                {t.heroTitle[0]}<em>{t.heroTitle[1]}</em>{t.heroTitle[2]}
+              </h1>
               <p className="intro">{t.intro}</p>
+              <ol className="how">
+                {t.howItWorks.map((step, i) => (
+                  <li key={step}><b>{i + 1}</b>{step}</li>
+                ))}
+              </ol>
             </div>
           )}
 

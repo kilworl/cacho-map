@@ -13,10 +13,31 @@ export interface CityContext extends GeoPoint {
   country?: string;
 }
 
+/** Kind of thing a person typed: a specific title/artist, or a general category ("videojuegos"). */
+export type EntityType = "artist" | "movie" | "tv_show" | "book" | "videogame" | "podcast" | "place";
+
+/** A free-text taste after normalization (before hitting Qloo). */
+export interface TasteQuery {
+  input: string;
+  kind: "title" | "category";
+  /** Canonical English title or category name used to query Qloo. */
+  query: string;
+  type?: EntityType;
+}
+
+/** A taste Qloo understood: an entity (urn:entity:…) or a tag (urn:tag:…) for categories. */
 export interface TasteEntity {
   id: string;
   name: string;
+  /** Entity type ("tv_show", "movie"…) or "tag" for categories. */
   type: string;
+  /** What the person actually typed. */
+  input: string;
+}
+
+export interface ResolvedTastes {
+  found: TasteEntity[];
+  missing: string[];
 }
 
 /** A Qloo place recommendation, normalized. */
@@ -53,8 +74,16 @@ export interface Pin extends GeoPoint {
   image?: string;
 }
 
+/** A place that explains a zone clash: only one of them would pick it. */
+export interface ZoneExample {
+  name: string;
+  genre?: string;
+}
+
 export interface ZoneStat extends GeoPoint {
   zone: string;
+  onlyA?: ZoneExample;
+  onlyB?: ZoneExample;
   /** % of places in this zone that only one of them would pick. */
   clashPct: number;
   n: number;
@@ -85,7 +114,8 @@ export interface MatchResult extends ScoreResult {
   city: CityContext;
   tastesA: TasteEntity[];
   tastesB: TasteEntity[];
-  missing: string[];
+  missingA: string[];
+  missingB: string[];
   roast: Roast;
   agent: "llm" | "fallback";
   toolCalls: string[];

@@ -1,4 +1,4 @@
-import type { GeoPoint, Place, SharedTag, TasteEntity } from "../types";
+import type { GeoPoint, Place, ResolvedTastes, SharedTag, TasteEntity, TasteQuery } from "../types";
 import { normalizeName } from "../text/titleCase";
 import { qlooGet } from "./client";
 
@@ -30,26 +30,72 @@ const entitiesOf = (d: unknown): RawEntity[] => {
   return (Array.isArray(r) ? r : r?.entities) ?? [];
 };
 
-const SEARCH_TYPES = ["artist", "movie", "tv_show", "book", "place", "podcast", "videogame"].map((t) => `urn:entity:${t}`).join(",");
+const ALL_TYPES = ["artist", "movie", "tv_show", "book", "podcast", "videogame"].map((t) => `urn:entity:${t}`).join(",");
 
-/** Resolves free-text tastes ("Bad Bunny", "Shrek") to Qloo entities, in parallel. */
-export async function resolveTastes(terms: string[]): Promise<{ found: TasteEntity[]; missing: string[] }> {
+/** Qloo signals for one person: specific entities plus general category tags. */
+export interface Signals {
+  entities: string[];
+  tags: string[];
+}
+
+export const toSignals = (found: TasteEntity[]): Signals => ({
+  entities: found.filter((e) => e.type !== "tag").map((e) => e.id),
+  tags: found.filter((e) => e.type === "tag").map((e) => e.id),
+});
+
+const signalParams = (s: Signals, prefix = ""): Record<string, string> => ({
+  ...(s.entities.length && { [`${prefix}signal.interests.entities`]: s.entities.join(",") }),
+  ...(s.tags.length && { [`${prefix}signal.interests.tags`]: s.tags.join(",") }),
+});
+
+/** Tag families that make good taste signals, best first (skip e.g. "specialty_dish"). */
+const TAG_PREF = ["urn:tag:genre:media", "urn:tag:subgenre:qloo", "urn:tag:genre:music", "urn:tag:cuisine:qloo", "urn:tag:keyword:qloo", "urn:tag:genre:place"];
+const tagRank = (type = "") => {
+  const i = TAG_PREF.findIndex((p) => type.startsWith(p));
+  return i < 0 ? 99 : i;
+};
+
+interface RawTagResult {
+  id?: string;
+  tag_id?: string;
+  name: string;
+  type?: string;
+  types?: string;
+}
+
+async function searchEntity(q: TasteQuery): Promise<TasteEntity | null> {
+  const run = async (types: string) => entitiesOf(await qlooGet("/search", { query: q.query, types, take: 3 }))[0];
+  // Restrict to the type the normalizer detected (Mentalista -> tv_show), then fall back to any type.
+  const e = (q.type ? await run(`urn:entity:${q.type}`) : undefined) ?? (await run(ALL_TYPES));
+  return e ? { id: e.entity_id, name: e.name, type: (e.types?.[0] ?? e.subtype ?? "").replace("urn:entity:", ""), input: q.input } : null;
+}
+
+async function searchTag(q: TasteQuery): Promise<TasteEntity | null> {
+  const d = await qlooGet<{ results?: { tags?: RawTagResult[] } }>("/v2/tags", { "filter.query": q.query, take: 8 });
+  const tags = (d?.results?.tags ?? []).filter((t) => t.id ?? t.tag_id);
+  const best = [...tags].sort((x, y) => tagRank(x.type ?? x.types) - tagRank(y.type ?? y.types))[0];
+  return best ? { id: (best.id ?? best.tag_id)!, name: best.name, type: "tag", input: q.input } : null;
+}
+
+/** Resolves normalized tastes to Qloo entities (titles) or tags (categories), in parallel. */
+export async function resolveTastes(queries: TasteQuery[]): Promise<ResolvedTastes> {
   const results = await Promise.all(
-    terms.slice(0, 6).map(async (q) => {
+    queries.slice(0, 8).map(async (q) => {
       try {
-        const e = entitiesOf(await qlooGet("/search", { query: q, types: SEARCH_TYPES, take: 3 }))[0];
-        return e ? { q, e: { id: e.entity_id, name: e.name, type: (e.types?.[0] ?? e.subtype ?? "").replace("urn:entity:", "") } } : { q };
+        const hit = q.kind === "category" ? await searchTag(q) : await searchEntity(q);
+        // A "title" that Qloo can't find may still be a category ("superhéroes"), and vice versa.
+        return { q, e: hit ?? (q.kind === "category" ? await searchEntity(q) : await searchTag(q)) };
       } catch {
-        return { q };
+        return { q, e: null };
       }
     }),
   );
   const found: TasteEntity[] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
-  for (const r of results) {
-    if (!r.e) missing.push(r.q);
-    else if (!seen.has(r.e.id)) { seen.add(r.e.id); found.push(r.e); }
+  for (const { q, e } of results) {
+    if (!e) missing.push(q.input);
+    else if (!seen.has(e.id)) { seen.add(e.id); found.push(e); }
   }
   return { found, missing };
 }
@@ -85,14 +131,14 @@ export function toPlace(e: RawEntity): Place | null {
  * Qloo place recommendations near a point, personalized by taste entities.
  * Widens the radius once if the area is sparse (small towns, rural locations).
  */
-export async function placesNear(ids: string[], at: GeoPoint, radiusM = 9000): Promise<Place[]> {
+export async function placesNear(signals: Signals, at: GeoPoint, radiusM = 9000): Promise<Place[]> {
   const fetchRadius = async (r: number) =>
     entitiesOf(
       await qlooGet("/v2/insights", {
         "filter.type": "urn:entity:place",
         "filter.location": `POINT(${at.lon.toFixed(4)} ${at.lat.toFixed(4)})`,
         "filter.location.radius": r,
-        "signal.interests.entities": ids.join(","),
+        ...signalParams(signals),
         take: 50,
       }),
     ).map(toPlace).filter((p): p is Place => !!p);
@@ -101,11 +147,8 @@ export async function placesNear(ids: string[], at: GeoPoint, radiusM = 9000): P
 }
 
 /** Shared taste tags between two sets of entities (Qloo /v2/insights/compare). */
-export async function compareTastes(a: string[], b: string[]): Promise<SharedTag[]> {
-  const d = await qlooGet<{ results?: { tags?: RawTag[] } }>("/v2/insights/compare", {
-    "a.signal.interests.entities": a.join(","),
-    "b.signal.interests.entities": b.join(","),
-  });
+export async function compareTastes(a: Signals, b: Signals): Promise<SharedTag[]> {
+  const d = await qlooGet<{ results?: { tags?: RawTag[] } }>("/v2/insights/compare", { ...signalParams(a, "a."), ...signalParams(b, "b.") });
   const names = (v: unknown) => (Array.isArray(v) ? v.map((x: { name: string }) => x.name) : []);
   return (d?.results?.tags ?? []).map((t) => ({
     name: t.name,

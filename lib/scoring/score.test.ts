@@ -36,6 +36,8 @@ describe("buildPins / zoneStats", () => {
     const centro = zones.find((z) => z.zone === "Centro")!;
     expect(centro).toMatchObject({ n: 2, both: 1, clashPct: 50, lat: 10, lon: -75 });
     expect(zones.find((z) => z.zone === "Manga")!.clashPct).toBe(100);
+    expect(centro.onlyB).toEqual({ name: "Z", genre: undefined });
+    expect(zones.find((z) => z.zone === "Manga")!.onlyA?.name).toBe("Y");
   });
 });
 

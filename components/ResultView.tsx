@@ -32,6 +32,11 @@ export function ResultView({ r, onZone, onReset }: Props) {
           <span className="big-sign">%</span>
           <span className="big-label">{t.cachos}</span>
         </div>
+        <p className="pct-explain">{t.pctExplain(r.cachos)}</p>
+        <details className="how-calc">
+          <summary>{t.howCalcTitle}</summary>
+          <ul>{t.howCalc(r.tagScore, r.placeScore, r.compat).map((line) => <li key={line}>{line}</li>)}</ul>
+        </details>
         <h2 className="result-title">
           <ShinyText text={rest.join(" · ") || label} color="#1a1410" shineColor="#ff3b1f" speed={3} />
         </h2>
@@ -51,7 +56,9 @@ export function ResultView({ r, onZone, onReset }: Props) {
         <p>{r.roast.plan}</p>
       </div>
 
-      <ZoneList zones={r.zones} onPick={onZone} />
+      <Understood r={r} />
+
+      <ZoneList zones={r.zones} a={r.a} b={r.b} onPick={onZone} />
 
       <div className="legend" aria-hidden="true">
         <span><i style={{ background: WHO_COLOR.both }} />{t.legendBoth}</span>
@@ -78,12 +85,40 @@ export function ResultView({ r, onZone, onReset }: Props) {
 
       <ShareActions url={shareUrl} text={`${r.roast.title} 🦌`} />
 
-      <p className="fine">
-        {t.qlooSaw}: {r.tastesA.map((e) => e.name).join(", ")} <i>vs</i> {r.tastesB.map((e) => e.name).join(", ")}
-        {r.missing.length > 0 && <> · {t.missing}: {r.missing.join(", ")}</>}
-        {r.agent === "fallback" && <> · {t.agentFallback}</>}
-      </p>
+      {r.agent === "fallback" && <p className="fine">{t.agentFallback}</p>}
       <button type="button" className="btn btn--ghost" onClick={onReset}>{t.again}</button>
     </article>
+  );
+}
+
+/** "What Qloo understood": per person, what each typed taste resolved to, and what it couldn't match. */
+function Understood({ r }: { r: MatchResult }) {
+  const { t } = useI18n();
+  const people = [
+    { who: r.a, side: "a", found: r.tastesA, missing: r.missingA },
+    { who: r.b, side: "b", found: r.tastesB, missing: r.missingB },
+  ] as const;
+  return (
+    <section className="understood">
+      <h3>{t.qlooSaw}</h3>
+      {people.map((p) => (
+        <div key={p.side} className={`understood-row understood--${p.side}`}>
+          <span className="understood-who">{p.who}</span>
+          <div className="chips">
+            {p.found.map((e) => (
+              <span key={e.id} className="chip chip--ok" title={e.input}>
+                {e.name}
+                <small>{e.type === "tag" ? t.category : e.type.replace("_", " ")}</small>
+                {e.input.toLowerCase() !== e.name.toLowerCase() && <em>← {e.input}</em>}
+              </span>
+            ))}
+            {p.missing.map((m) => (
+              <span key={m} className="chip chip--miss" title={t.missingHint}>✕ {m}</span>
+            ))}
+          </div>
+        </div>
+      ))}
+      {(r.missingA.length > 0 || r.missingB.length > 0) && <p className="fine">{t.missing}: {t.missingHint}</p>}
+    </section>
   );
 }

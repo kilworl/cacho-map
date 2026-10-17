@@ -1,5 +1,6 @@
 import type { CityContext, Lang, MatchResult } from "../types";
-import { compareTastes, placesNear, resolveTastes } from "../qloo/api";
+import { compareTastes, placesNear, resolveTastes, toSignals } from "../qloo/api";
+import { normalizeTastes } from "../tastes/normalize";
 import { assignZones } from "../geo/zones";
 import { score } from "../scoring/score";
 import { generateRoast } from "../agent/roast";
@@ -27,13 +28,17 @@ export class NoTastesError extends Error {
 export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchResult> {
   const t0 = Date.now();
   const timings: Record<string, number> = {};
-  const [ra, rb] = await Promise.all([resolveTastes(a.tastes), resolveTastes(b.tastes)]);
-  timings.search = Date.now() - t0;
-  const missing = [...ra.missing, ...rb.missing];
-  if (!ra.found.length || !rb.found.length) throw new NoTastesError(missing);
+  // One LLM call normalizes both people's tastes (Spanish titles -> English, categories -> tags).
+  const ta = a.tastes.slice(0, 8);
+  const tb = b.tastes.slice(0, 8);
+  const normalized = await normalizeTastes([...ta, ...tb]);
+  timings.normalize = Date.now() - t0;
+  const [ra, rb] = await Promise.all([resolveTastes(normalized.slice(0, ta.length)), resolveTastes(normalized.slice(ta.length))]);
+  timings.search = Date.now() - t0 - timings.normalize;
+  if (!ra.found.length || !rb.found.length) throw new NoTastesError([...ra.missing, ...rb.missing]);
 
-  const ia = ra.found.map((e) => e.id);
-  const ib = rb.found.map((e) => e.id);
+  const ia = toSignals(ra.found);
+  const ib = toSignals(rb.found);
   const t1 = Date.now();
   const [tags, pa, pb] = await Promise.all([compareTastes(ia, ib), placesNear(ia, city), placesNear(ib, city)]);
   timings.insights = Date.now() - t1;
@@ -60,5 +65,5 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   }
   timings.agent = Date.now() - t2;
   timings.total = Date.now() - t0;
-  return { a: a.nick, b: b.nick, lang, city, tastesA: ra.found, tastesB: rb.found, missing, ...s, roast, agent, toolCalls, timings };
+  return { a: a.nick, b: b.nick, lang, city, tastesA: ra.found, tastesB: rb.found, missingA: ra.missing, missingB: rb.missing, ...s, roast, agent, toolCalls, timings };
 }

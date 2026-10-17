@@ -22,7 +22,7 @@ export function buildTools(r: ScoreResult, a: string, b: string) {
       description: "Neighborhoods ordered from most to least contested (where their Qloo place picks disagree). No numbers: never quote zone figures.",
       inputSchema: z.object({}),
       execute: async () => ({
-        mostContested: r.zones.slice(0, 3).map((z) => z.zone),
+        mostContested: r.zones.slice(0, 3).map((z) => ({ zone: z.zone, onlyA: z.onlyA?.name ?? null, onlyB: z.onlyB?.name ?? null })),
         leastContested: [...r.zones].sort((x, y) => x.clashPct - y.clashPct || y.n - x.n).slice(0, 2).map((z) => z.zone),
       }),
     }),

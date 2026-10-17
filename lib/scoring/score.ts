@@ -1,4 +1,4 @@
-import type { Pin, ScoreResult, SharedTag, ZonedPlace, ZoneStat } from "../types";
+import type { Pin, ScoreResult, SharedTag, ZonedPlace, ZoneExample, ZoneStat } from "../types";
 
 /** How many top places per person we compare. */
 export const TOP_PLACES = 25;
@@ -42,18 +42,25 @@ export function buildPins(pa: ZonedPlace[], pb: ZonedPlace[]): Pin[] {
 
 /** Per-zone disagreement: share of a zone's places that only one person would choose. */
 export function zoneStats(pins: Pin[]): ZoneStat[] {
-  const acc = new Map<string, { both: number; n: number; lat: number; lon: number }>();
+  const acc = new Map<string, { both: number; n: number; lat: number; lon: number; onlyA?: ZoneExample; onlyB?: ZoneExample }>();
   for (const p of pins) {
     const z = acc.get(p.zone) ?? { both: 0, n: 0, lat: 0, lon: 0 };
     z.n++;
     if (p.who === "both") z.both++;
+    // First pin per side = highest-ranked Qloo pick for that person in this zone.
+    if (p.who === "a" && !z.onlyA) z.onlyA = { name: p.name, genre: p.genre };
+    if (p.who === "b" && !z.onlyB) z.onlyB = { name: p.name, genre: p.genre };
     z.lat += p.lat;
     z.lon += p.lon;
     acc.set(p.zone, z);
   }
   return [...acc.entries()]
-    .map(([zone, z]) => ({ zone, n: z.n, both: z.both, clashPct: Math.round(((z.n - z.both) / z.n) * 100), lat: z.lat / z.n, lon: z.lon / z.n }))
-    .sort((x, y) => y.clashPct * y.n - x.clashPct * x.n || y.n - x.n);
+    .map(([zone, z]) => ({
+      zone, n: z.n, both: z.both, clashPct: Math.round(((z.n - z.both) / z.n) * 100), lat: z.lat / z.n, lon: z.lon / z.n,
+      ...(z.onlyA && { onlyA: z.onlyA }), ...(z.onlyB && { onlyB: z.onlyB }),
+    }))
+    // Most disagreements first (count of one-sided places), then the higher share.
+    .sort((x, y) => y.n - y.both - (x.n - x.both) || y.clashPct - x.clashPct || y.n - x.n);
 }
 
 /** Full score: 60% shared taste tags + 40% overlap of recommended places. */

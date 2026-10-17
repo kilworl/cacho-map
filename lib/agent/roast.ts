@@ -4,6 +4,7 @@ import type { Lang, Roast, ScoreResult } from "../types";
 import { buildTools } from "./tools";
 import { systemPrompt, userPrompt } from "./prompt";
 import { sanitizeRoast } from "./sanitize";
+import { modelId } from "./model";
 
 const RoastSchema = z.object({
   title: z.string().describe("Starts with the overall % label, then ' · ' and a short punchline"),
@@ -11,7 +12,6 @@ const RoastSchema = z.object({
   plan: z.string().describe("One-sentence date plan at a place both agree on"),
 });
 
-export const DEFAULT_MODEL = "google/gemini-2.5-flash";
 
 interface RoastInput {
   a: string;
@@ -28,7 +28,7 @@ interface RoastInput {
 export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city, signal }: RoastInput): Promise<{ roast: Roast; toolCalls: string[] }> {
   const toolCalls: string[] = [];
   const res = await generateText({
-    model: process.env.AI_MODEL || DEFAULT_MODEL,
+    model: modelId(),
     tools: buildTools(score, a, b),
     stopWhen: isStepCount(4),
     output: Output.object({ schema: RoastSchema }),
