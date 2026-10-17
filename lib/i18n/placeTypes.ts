@@ -37,11 +37,11 @@ export function placeType(genre: string | undefined, lang: Lang): { plural: stri
 const AMBIENCE_ES: Record<string, string> = {
   social: "social", lively: "animado", casual: "casual", cozy: "acogedor", quiet: "tranquilo", relaxing: "relajado",
   romantic: "romántico", elegant: "elegante", historic: "histórico", trendy: "de moda", upscale: "exclusivo",
-  "family friendly": "familiar", welcoming: "acogedor", bohemian: "bohemio", charming: "encantador",
+  "family friendly": "familiar", colonial: "colonial", welcoming: "acogedor", bohemian: "bohemio", charming: "encantador",
   sophisticated: "sofisticado", luxurious: "lujoso", stylish: "con estilo", traditional: "tradicional",
   touristic: "turístico", warm: "cálido", shady: "con sombra", modern: "moderno", vibrant: "vibrante",
   intimate: "íntimo", festive: "festivo", artsy: "artístico", hip: "de moda", grand: "imponente", clean: "limpio",
-  "colonial vibe": "colonial", mainstream: "popular", convenient: "práctico", peaceful: "tranquilo", scenic: "con vista",
+  mainstream: "popular", convenient: "práctico", peaceful: "tranquilo", scenic: "con vista",
 };
 
 /** Ambience tag in the UI language; null when we have no Spanish for it (never show English in ES copy). */

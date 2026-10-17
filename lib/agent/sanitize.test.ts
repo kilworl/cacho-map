@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLine, sanitizeRoast } from "./sanitize";
+import { cleanLine, inLang, sanitizeRoast } from "./sanitize";
 
 describe("cleanLine", () => {
   it("drops sentences quoting zone percentages but keeps the overall one", () => {
@@ -38,5 +38,12 @@ describe("sanitizeRoast", () => {
     expect(cleanLine("Caro se tira por la ventana. Dani pide tacos.", 50)).toBe("Dani pide tacos.");
     expect(cleanLine("Dani would rather die than watch it. Caro picks the show.", 50)).toBe("Caro picks the show.");
     expect(cleanLine("A Caro le montaron los cachos con queso.", 50)).toBe("A Caro le montaron los cachos con queso.");
+  });
+});
+
+describe("inLang", () => {
+  it("detects a Spanish roast on an English request", () => {
+    expect(inLang("Dani adora Harry Potter. Con ese 90% de riesgo, no es un prisionero, solo tiene otro plan.", "en")).toBe(false);
+    expect(inLang("Caro loves The Mentalist, so none of Dani's alibis survive a Friday.", "en")).toBe(true);
   });
 });

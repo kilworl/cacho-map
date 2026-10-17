@@ -26,7 +26,7 @@ const list = (xs: string[], lang: Lang) => (xs.length < 2 ? xs.join("") : `${xs.
 /** Deterministic zone copy built only from the Qloo profile. */
 export function templateZone(z: ZoneStat, { a, b, lang }: Ctx): { description: string; why: string } {
   const types = [...new Set(z.profile.genres.map((g) => placeType(g, lang)).filter((t) => t && (t.known || lang === "en")).map((t) => t!.plural))].slice(0, 2);
-  const vibe = [...new Set(z.profile.ambience.map((x) => ambience(x, lang)).filter((x): x is string => !!x))].slice(0, 2);
+  const vibe = [...new Set(z.profile.ambience.map((x) => ambience(x.replace(/ vibe$/i, ""), lang)).filter((x): x is string => !!x))].slice(0, 2);
   const price = priceSigns(z.profile.avgPrice);
   const es = lang === "es";
   const description = types.length
@@ -89,7 +89,7 @@ Person A is "${ctx.a}" (likes ${ctx.tastesA.join(", ")}), person B is "${ctx.b}"
 STRICT RULE: use ONLY the facts in the JSON. Never invent places, foods, prices, history or vibes that are not listed. If a field is empty or null, don't mention it at all (never say something is "not specified"). Attribute a cuisine or type to a place only if that place's own fields list it.
 For each zone:
 - "description" (max 20 words): what the area is like (what kind of places, food, vibe, price), from place_types, cuisines, ambience, price. Don't mention the couple or the zone kind here.
-- "why" (max 22 words): kind "danger": name one example liked by only ONE of them and say that person would end up going alone (playful "cacho"/cheating risk). kind "safe": name one example liked_by "both" and say they'd go together. Don't say "danger zone"/"safe zone" literally.
+- "why" (max 22 words): kind "danger": name one example (exact name) liked by only ONE of them and say that person would end up going alone (playful "cacho"/cheating risk). kind "safe": name one example (exact name) liked_by "both" and say they'd go together. Never use generic phrases like "a pizza place" instead of the name. Don't say "danger zone"/"safe zone" literally.
 For each place: "summary" (max 14 words): what it is, from types/cuisines/qloo_description (translated), without repeating the place name. "plan" (max 12 words): a concrete thing to do there, matching its type.
 Gender: use the person's name; avoid gendered adjectives ("solo/sola") unless the name is clearly one gender.
 ALL output text must be in ${ctx.lang === "es" ? "Spanish (translate qloo_description and tags to Spanish)" : "English"}.

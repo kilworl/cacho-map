@@ -3,8 +3,9 @@ import { z } from "zod";
 import type { Lang, Roast, ScoreResult } from "../types";
 import { buildTools } from "./tools";
 import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
-import { cleanLine, sanitizeRoast } from "./sanitize";
+import { cleanLine, inLang, sanitizeRoast } from "./sanitize";
 import { modelId, normalizeModelId } from "./model";
+import { fallbackRoast } from "./fallback";
 
 const Candidate = z.object({
   title: z.string().describe("Starts with the risk label, then ' · ' and a punchline of max 6 words"),
@@ -90,7 +91,7 @@ export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city,
   const out = (res as unknown as { output?: z.infer<typeof RoastSchema> }).output;
   const cands = (out?.candidates ?? [])
     .map((c) => sanitizeRoast({ ...c, plan: "" }, score.risk, lang, score.zones[0]?.zone))
-    .filter((c) => c.roast.split(/\s+/).length >= 6);
+    .filter((c) => c.roast.split(/\s+/).length >= 6 && inLang(c.roast, lang));
   if (!cands.length || !out) throw new Error("empty roast");
 
   const context = `${a} likes ${tastesA.join(", ")}; ${b} likes ${tastesB.join(", ")}; places: ${score.pins.slice(0, 12).map((p) => p.name).join(", ")}`;
@@ -99,7 +100,7 @@ export async function generateRoast({ a, b, tastesA, tastesB, score, lang, city,
   const ranked = [...judged].sort((x, y) => y.total - x.total);
   const best = ranked[0].total >= 0 ? ranked[0].c : cands[0];
   return {
-    roast: { ...best, plan: cleanLine(out.plan, score.risk) },
+    roast: { ...best, plan: inLang(out.plan, lang) ? cleanLine(out.plan, score.risk) : fallbackRoast(a, b, score, lang).plan },
     toolCalls,
     judged: judged.map((j) => ({ roast: j.c.roast, total: j.total, dropped: j.total < 0 })),
   };

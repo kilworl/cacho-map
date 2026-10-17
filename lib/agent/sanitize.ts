@@ -36,3 +36,14 @@ export function sanitizeRoast(r: Roast, pct: number, lang: Lang, worstZone?: str
   }
   return { title, roast: cleanLine(r.roast, pct), plan: cleanLine(r.plan, pct) };
 }
+
+const ES_WORDS = new Set("el la los las que con de y es un una para no se su le lo del al por como pero muy más ya".split(" "));
+const EN_WORDS = new Set("the and is a to of with for her his they it at in on but that this you if not".split(" "));
+
+/** Crude language check so an English request never shows a Spanish roast (and vice versa). */
+export function inLang(text: string, lang: Lang): boolean {
+  const words = text.toLowerCase().match(/\p{L}+/gu) ?? [];
+  const es = words.filter((w) => ES_WORDS.has(w)).length;
+  const en = words.filter((w) => EN_WORDS.has(w)).length;
+  return lang === "es" ? es >= en : en >= es;
+}
