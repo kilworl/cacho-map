@@ -7,8 +7,8 @@ const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-disp
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap", weight: ["500", "700"] });
 
 export const metadata: Metadata = {
-  title: "Cacho-Map · ¿Cuántos cachos le ponen a sus gustos?",
-  description: "Taste-incompatibility map for couples, powered by Qloo's taste AI. Works in any city, in Spanish and English.",
+  title: "Cacho-Map · ¿Cuál es su riesgo de cacho?",
+  description: "Cheating-risk map for couples: how many of the plans one likes the other doesn't, and where in your city. Powered by Qloo's taste AI, in Spanish and English.",
   metadataBase: new URL(process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000"),
 };
 

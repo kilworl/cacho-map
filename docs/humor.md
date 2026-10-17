@@ -1,41 +1,79 @@
-# Cacho-Map humor guide
+# Cacho-Map humor guide (v4)
 
-Research notes behind the roast prompt (`lib/agent/prompt.ts`). Source: a sample of
-couple / relationship posts on X (Oct 2026) in Latin-American Spanish and English,
-searched with terms like *"mi novio cuando"*, *cachos*, *tóxica*, *red flag*, *POV:*,
-*playlist / Spotify Wrapped*, *my bf's music taste*. We looked at what gets likes and
-replies, not at individual authors; no posts are reproduced in the app.
+Rules behind the roast prompt (`lib/agent/prompt.ts`), the judge and the sanitizer
+(`lib/agent/roast.ts`, `lib/agent/sanitize.ts`).
 
-## What actually travels
+## The premise
 
-| Pattern | Example shape (paraphrased) | Why it works |
+"Cacho" / "cachos" in Colombia means **being cheated on** ("le montaron los cachos",
+"le pegaron cacho", "cachón/cachona"). It does **not** mean fighting.
+
+Cacho-Map's joke: the **riesgo de cacho** is the share of the plans one person likes that the
+other doesn't. Those are the plans where one ends up going out alone... or "with other
+company". So every joke lives in that gap: the plan you'd do without your partner, the alibi,
+the secret double life of your Saturday. It's about **plans and tastes**, never a real accusation.
+
+## What we saw on X (Oct 2026)
+
+A sample of posts using "montaron los cachos", "pegar cacho", "cachos con queso" and
+"cachos de película" (Colombian and Venezuelan Spanish):
+
+- Most real uses are **insults** thrown at a person ("por eso te montaron los cachos"), often
+  in political fights. That's exactly the tone to avoid. Our jokes point at the plan or the
+  taste, never at a person's worth.
+- The posts people enjoy are **self-aware and specific**: the deer emoji 🦌, "me montaron los
+  cachos, las cosas de ella duermen afuera". Small domestic consequences, not tragedy.
+- Expressions only land when used with their real meaning. "Cachos de película" works when there
+  are movies in the data; "cachos con queso" when there's food. Forced slang reads fake.
+
+(Earlier v2 research on couple humor still applies: short setup → punchline, hyper-specific
+cultural references, tiny stakes treated as huge drama, never punching down.)
+
+## What a good joke looks like
+
+**Setup** (a real taste or real place from Qloo) + **a double meaning** that connects it to
+cheating / going out alone + **a short punchline**. It must make literal sense; if it needs an
+explanation, it's out.
+
+Hooks that work (what a taste is famous for, connected to cheating):
+
+| Taste | Hook | Shape |
 |---|---|---|
-| **Caption + colon** | "Mi novio cuando pongo mi playlist:" | Setup in ≤6 words, the reader fills the punchline. |
-| **Escalating metaphor** | "No es una red flag, es una luz de aeropuerto." | Takes a cliché and pushes it one absurd step further. |
-| **Diagnosis by references** | "Si el Spotify de tu novia es puro vallenato cover y salchipapa, déjame decirte…" | Hyper-specific cultural details = instant recognition. |
-| **Tiny stakes, huge drama** | "Me compró el café de la otra marca, ¿es red flag o termino?" | Treats a taste difference like a breakup-level crime. |
-| **Side-by-side contrast** | "Él: alitas toda la semana ✅. En mi casa: ❌❌❌" | Two lines, the gap is the joke. |
-| **Self-deprecation** | "My boyfriend has better music taste than me, I should just die." | Punches at yourself, never at the partner's body or identity. |
-| **Petty sabotage** | "Secretly removing songs from our shared playlist." | Small, relatable crime; cute, not mean. |
-| **Wrapped / stats humor** | "Hope Wrapped counts the minutes I waited for him outside the store." | Fake data about real couple habits. |
+| Superheroes | secret identity, double life | "…ya tiene identidad secreta para los sábados." |
+| Harry Potter | invisibility cloak, Marauder's Map | "…con capa de invisibilidad, ni el Mapa del Merodeador lo encuentra." |
+| The Mentalist / Sherlock | catches liars | "…a Dani no le alcanza ninguna coartada." |
+| Taylor Swift / Shakira | breakup songs / "las mujeres ya no lloran, facturan" | "…si hay cacho, mínimo sale un álbum." |
+| Fast & Furious | "rápido" / "furioso" | "…uno sale rápido y el otro furioso." |
+| Stranger Things | the Upside Down | "…no se sabe con quién anda en el Upside Down." |
+| Food tags | "cachos con queso" | only when food is in the data |
 
-## Rules we derived for the roast
+Good (from v4 test runs):
 
-1. **Short.** 1–2 sentences, ≤ 35 words. Punchline at the end.
-2. **Specific beats generic.** Name one real taste from each person and one real place
-   from the Qloo data. "Ella pone Karol G, él pone Radiohead" beats "tienen gustos distintos".
-3. **One format per roast** from the table above. No stacking three jokes.
-4. **Don't explain the joke**, no morals ("al final lo importante es el amor"), no
-   "¡Ay,", "Oye,", "Vaya,", no exclamation-mark spam, no "jaja", no emojis in the text.
-5. **Only the overall %** may appear. Zone percentages confuse people ("¿80% de qué?").
-6. **Light costeño flavor** when writing Spanish (*ajá, eche, qué nota, pelao/pelada,
-   mamar gallo, no joda* used softly). Never vulgar slang. In English, deadpan internet tone.
-7. **"Cachos" means taste-cheating** (picking a different playlist, restaurant or movie),
-   never real infidelity. No bodies, sexuality, religion, politics, real third parties,
-   or trashing a real business.
-8. Place names in proper Title Case (we normalize ALL-CAPS names from the data).
+- "A Dani le gusta Taylor Swift. Con este 90% de riesgo, si hay cacho, mínimo sale un álbum de canciones de despecho."
+- "A Andrés le gusta Stranger Things; con este 55%, Laura no va a saber con quién anda en el 'Upside Down'."
 
-## Before / after
+Bad (rejected):
 
-- ❌ "¡Ay, mi gente! Con 54% de cachos en el Centro, estos dos van a tener que negociar mucho, porque sus gustos son muy distintos."
-- ✅ "Él quiere Café Havana, ella quiere ver Amélie en casa. 54% de cachos: no es incompatibilidad, es custodia compartida del control remoto."
+- ❌ "La mente no es tan fuerte para evitar un cacho." (no setup, makes no sense)
+- ❌ "…se tira por la ventana." (dark: never)
+- ❌ "Por eso le montaron los cachos." (an insult at a person, not a joke about plans)
+
+## Rules (enforced by prompt, judge and sanitizer)
+
+1. 1–2 sentences, ≤ 30 words, punchline at the end.
+2. Name the couple and at least one real taste or real place from the Qloo tools.
+3. Light and affectionate. Nothing explicit, cruel, dark or violent. No bodies, sexuality,
+   religion, politics, named real third parties, or trashing a business.
+4. No exclamation marks, emojis, "¡Ay,", morals or explaining the joke.
+5. Only the overall % may appear.
+6. Match the level: low risk → "the cacho would be with something harmless"; high → "each on their own".
+7. Use the person's name when gender is unclear.
+
+## Pipeline
+
+1. The agent (gemini-2.5-flash) calls the Qloo tools and writes **3 candidates**, each with a different hook.
+2. The sanitizer cleans each one (banned phrases, other percentages, slang tics, and any sentence
+   matching the dark/violent filter: ventana, muerte, matar, sangre, golpe, armas, kill, die…).
+3. A judge (gemini-2.5-flash-lite) scores coherence, wordplay, funniness and safety. Candidates
+   with coherence < 3 or safety < 4 are dropped; the highest total wins.
+4. If the LLM is unavailable, a data-driven template roast is used.

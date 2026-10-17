@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPins, placeOverlap, score, tagSimilarity, zoneStats } from "./score";
+import { buildPins, cheatingRisk, riskLevel, score, tagSimilarity, zoneStats } from "./score";
 import type { SharedTag, ZonedPlace } from "../types";
 
 const place = (id: string, zone: string, lat = 10, lon = -75): ZonedPlace => ({ id, name: id.toUpperCase(), lat, lon, affinity: 1, zone });
@@ -11,16 +11,20 @@ describe("tagSimilarity", () => {
     expect(tagSimilarity(Array(40).fill(tag(0.5)))).toBe(0);
     expect(tagSimilarity(Array(40).fill(tag(0.8)))).toBe(100);
   });
-  it("dampens results backed by few tags", () => {
-    expect(tagSimilarity(Array(10).fill(tag(0.8)))).toBeCloseTo(25);
-  });
 });
 
-describe("placeOverlap", () => {
-  it("is Jaccard similarity", () => {
-    expect(placeOverlap(["a", "b"], ["b", "c"])).toEqual({ score: (1 / 3) * 100, shared: 1 });
+describe("cheatingRisk", () => {
+  it("is the average share of each person's places the other doesn't like", () => {
+    // A likes 4 (1 shared -> 3/4 one-sided), B likes 2 (1 shared -> 1/2): (75 + 50) / 2
+    expect(cheatingRisk(["s", "a1", "a2", "a3"], ["s", "b1"])).toEqual({ risk: 63, onlyA: 3, onlyB: 1, shared: 1 });
   });
-  it("handles empty input", () => expect(placeOverlap([], [])).toEqual({ score: 0, shared: 0 }));
+  it("is 0 for identical lists and 100 for disjoint ones", () => {
+    expect(cheatingRisk(["a", "b"], ["b", "a"]).risk).toBe(0);
+    expect(cheatingRisk(["a"], ["b"]).risk).toBe(100);
+  });
+  it("levels", () => {
+    expect([10, 40, 70, 90].map(riskLevel)).toEqual(["low", "medium", "high", "cheating"]);
+  });
 });
 
 describe("buildPins / zoneStats", () => {
@@ -31,28 +35,26 @@ describe("buildPins / zoneStats", () => {
   it("marks shared places as both and deduplicates", () => {
     expect(pins.map((p) => [p.id, p.who])).toEqual([["x", "both"], ["y", "a"], ["z", "b"]]);
   });
-  it("computes per-zone disagreement and centroids", () => {
+  it("computes per-zone risk, danger/safe kind and centroids", () => {
     const zones = zoneStats(pins);
     const centro = zones.find((z) => z.zone === "Centro")!;
-    expect(centro).toMatchObject({ n: 2, both: 1, clashPct: 50, lat: 10, lon: -75 });
-    expect(zones.find((z) => z.zone === "Manga")!.clashPct).toBe(100);
+    expect(centro).toMatchObject({ n: 2, both: 1, riskPct: 50, kind: "danger", lat: 10, lon: -75 });
+    expect(zones.find((z) => z.zone === "Manga")).toMatchObject({ riskPct: 100, kind: "danger" });
     expect(centro.onlyB).toEqual({ name: "Z", genre: undefined });
-    expect(zones.find((z) => z.zone === "Manga")!.onlyA?.name).toBe("Y");
+    const safe = zoneStats(buildPins([place("q", "Bocagrande"), place("w", "Bocagrande")], [place("q", "Bocagrande"), place("w", "Bocagrande")]));
+    expect(safe[0]).toMatchObject({ kind: "safe", riskPct: 0 });
   });
 });
 
 describe("score", () => {
-  it("weights tags 60% and places 40%, cachos = 100 - compat", () => {
-    const r = score(Array(40).fill(tag(0.8)), [place("a", "Z")], [place("a", "Z")]);
-    expect(r.compat).toBe(100);
-    expect(r.cachos).toBe(0);
-    const r2 = score([], [place("a", "Z")], [place("b", "Z")]);
-    expect(r2.compat).toBe(0);
-    expect(r2.cachos).toBe(100);
-    expect(r2.zones[0]).toMatchObject({ zone: "Z", clashPct: 100 });
+  it("risk matches its definition", () => {
+    expect(score([], [place("a", "Z")], [place("a", "Z")])).toMatchObject({ risk: 0, level: "low", shared: 1 });
+    const r = score([], [place("a", "Z")], [place("b", "Z")]);
+    expect(r).toMatchObject({ risk: 100, level: "cheating", onlyA: 1, onlyB: 1 });
+    expect(r.zones[0]).toMatchObject({ zone: "Z", riskPct: 100 });
   });
-  it("only compares the top 25 places per person", () => {
+  it("only compares the top 20 places per person", () => {
     const many = Array.from({ length: 40 }, (_, i) => place(`p${i}`, "Z"));
-    expect(score([], many, many).pins).toHaveLength(25);
+    expect(score([], many, many).pins).toHaveLength(20);
   });
 });

@@ -27,10 +27,12 @@ interface Props {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function popupHtml(p: Pin, labels: PinLabels): string {
-  const meta = [p.genre, p.zone].filter(Boolean).map((x) => esc(String(x))).join(" · ");
+  const meta = [p.tags?.genres?.[0] ?? p.genre, p.tags?.cuisines?.[0], p.zone].filter(Boolean).map((x) => esc(String(x))).join(" · ");
   const img = p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" />` : "";
   const rating = p.rating ? `<span class="pop-rating">★ ${p.rating.toFixed(1)}</span>` : "";
-  return `<div class="pop pop--${p.who}">${img}<div class="pop-body"><span class="pop-who">${esc(labels[p.who])}</span><strong>${esc(p.name)}</strong><small>${meta} ${rating}</small></div></div>`;
+  const summary = p.summary ? `<p class="pop-sum">${esc(p.summary)}</p>` : "";
+  const plan = p.plan ? `<p class="pop-plan">${esc(p.plan)}</p>` : "";
+  return `<div class="pop pop--${p.who}">${img}<div class="pop-body"><span class="pop-who">${esc(labels[p.who])}</span><strong>${esc(p.name)}</strong><small>${meta} ${rating}</small>${summary}${plan}</div></div>`;
 }
 
 function zonesGeoJSON(zones: ZoneStat[]): GeoJSON.FeatureCollection {
@@ -39,7 +41,7 @@ function zonesGeoJSON(zones: ZoneStat[]): GeoJSON.FeatureCollection {
     features: zones.map((z) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [z.lon, z.lat] },
-      properties: { zone: z.zone, clash: z.clashPct, n: z.n },
+      properties: { zone: z.zone, clash: z.riskPct, n: z.n },
     })),
   };
 }

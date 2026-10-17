@@ -40,6 +40,14 @@ export interface ResolvedTastes {
   missing: string[];
 }
 
+/** Descriptive Qloo tags of a place (all from Qloo data, in English). */
+export interface PlaceTags {
+  genres: string[];
+  cuisines: string[];
+  ambience: string[];
+  activities: string[];
+}
+
 /** A Qloo place recommendation, normalized. */
 export interface Place extends GeoPoint {
   id: string;
@@ -50,6 +58,9 @@ export interface Place extends GeoPoint {
   rating?: number;
   priceLevel?: number;
   image?: string;
+  /** Qloo's short description (English). */
+  description?: string;
+  tags?: PlaceTags;
 }
 
 /** A Place after we assigned it to a zone (neighborhood). */
@@ -72,6 +83,13 @@ export interface Pin extends GeoPoint {
   genre?: string;
   rating?: number;
   image?: string;
+  priceLevel?: number;
+  description?: string;
+  tags?: PlaceTags;
+  /** Localized one-liner: what the place is (LLM-phrased from Qloo data). */
+  summary?: string;
+  /** Localized one-line plan: what you'd do there. */
+  plan?: string;
 }
 
 /** A place that explains a zone clash: only one of them would pick it. */
@@ -80,22 +98,47 @@ export interface ZoneExample {
   genre?: string;
 }
 
+/** Facts about a zone aggregated from its Qloo places (no LLM). */
+export interface ZoneProfile {
+  genres: string[];
+  cuisines: string[];
+  ambience: string[];
+  avgPrice?: number;
+}
+
 export interface ZoneStat extends GeoPoint {
   zone: string;
   onlyA?: ZoneExample;
   onlyB?: ZoneExample;
-  /** % of places in this zone that only one of them would pick. */
-  clashPct: number;
+  /** % of this zone's places that only one of them likes (where one would go alone). */
+  riskPct: number;
+  /** "danger" = mostly one-sided places, "safe" = places they'd enjoy together. */
+  kind: "danger" | "safe";
   n: number;
   both: number;
+  a: number;
+  b: number;
+  profile: ZoneProfile;
+  /** Localized characterization of the zone, phrased from `profile`. */
+  description?: string;
+  /** Localized reason why it's risky/safe for this couple. */
+  why?: string;
 }
 
+export type RiskLevel = "low" | "medium" | "high" | "cheating";
+
 export interface ScoreResult {
-  compat: number;
-  cachos: number;
-  tagScore: number;
-  placeScore: number;
+  /** Cheating risk: average share of each person's liked places the other doesn't like. */
+  risk: number;
+  level: RiskLevel;
+  /** One-sided place counts and list sizes, to explain the number. */
+  onlyA: number;
+  onlyB: number;
+  totalA: number;
+  totalB: number;
   shared: number;
+  /** Secondary: Qloo taste-tag affinity (0-100). */
+  tagScore: number;
   pins: Pin[];
   zones: ZoneStat[];
   topTags: SharedTag[];
@@ -119,5 +162,7 @@ export interface MatchResult extends ScoreResult {
   roast: Roast;
   agent: "llm" | "fallback";
   toolCalls: string[];
+  /** Roast candidates with judge totals (-1 = dropped as nonsense/unsafe). */
+  judged?: { roast: string; total: number; dropped: boolean }[];
   timings: Record<string, number>;
 }

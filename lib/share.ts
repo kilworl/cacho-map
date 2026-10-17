@@ -5,8 +5,8 @@ export function shareQuery(r: MatchResult): string {
   return new URLSearchParams({
     a: r.a,
     b: r.b,
-    p: String(r.cachos),
-    z: r.zones[0]?.zone ?? "",
+    p: String(r.risk),
+    z: r.zones.find((z) => z.kind === "danger")?.zone ?? "",
     c: r.city.name,
     t: r.roast.roast.slice(0, 220),
     l: r.lang,

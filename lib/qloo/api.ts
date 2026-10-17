@@ -18,6 +18,8 @@ interface RawEntity {
     price_level?: number;
     images?: { url?: string }[];
     is_closed?: boolean;
+    short_description?: string;
+    description?: string;
   };
 }
 interface RawTag {
@@ -50,10 +52,14 @@ const signalParams = (s: Signals, prefix = ""): Record<string, string> => ({
 
 /** Tag families that make good taste signals, best first (skip e.g. "specialty_dish"). */
 const TAG_PREF = ["urn:tag:genre:media", "urn:tag:subgenre:qloo", "urn:tag:genre:music", "urn:tag:cuisine:qloo", "urn:tag:keyword:qloo", "urn:tag:genre:place"];
-const tagRank = (type = "") => {
+const tagRank = (type = "", food = false) => {
+  if (food && type.startsWith("urn:tag:cuisine")) return -1;
   const i = TAG_PREF.findIndex((p) => type.startsWith(p));
   return i < 0 ? 99 : i;
 };
+
+/** "comida mexicana" must resolve to the Mexican cuisine tag, not Mexican music. */
+const FOOD = /comida|food|cocina|cuisine|restaurant|plato|dish|sushi|pizza|burger|tacos?|coffee|caf[eé]|beer|cerveza|wine|vino|seafood|mariscos|bbq|ramen|vegan|vegetarian|brunch|dessert|postre/i;
 
 interface RawTagResult {
   id?: string;
@@ -73,7 +79,8 @@ async function searchEntity(q: TasteQuery): Promise<TasteEntity | null> {
 async function searchTag(q: TasteQuery): Promise<TasteEntity | null> {
   const d = await qlooGet<{ results?: { tags?: RawTagResult[] } }>("/v2/tags", { "filter.query": q.query, take: 8 });
   const tags = (d?.results?.tags ?? []).filter((t) => t.id ?? t.tag_id);
-  const best = [...tags].sort((x, y) => tagRank(x.type ?? x.types) - tagRank(y.type ?? y.types))[0];
+  const food = FOOD.test(`${q.input} ${q.query}`);
+  const best = [...tags].sort((x, y) => tagRank(x.type ?? x.types, food) - tagRank(y.type ?? y.types, food))[0];
   return best ? { id: (best.id ?? best.tag_id)!, name: best.name, type: "tag", input: q.input } : null;
 }
 
@@ -101,18 +108,22 @@ export async function resolveTastes(queries: TasteQuery[]): Promise<ResolvedTast
 }
 
 /** Places nobody goes to on a date: filtered out of recommendations. */
-const BORING = /store|shop|supermarket|mall|bank|naval|military|newspaper|publisher|record (label|company)|office|school|academ|universit|church|hospital|clinic|pharmac|gas station|parking|apartment|real estate|tour operator|serviced accommodation|corporate|government|embassy|consulate|airport|bus station|cemetery|dentist|gym|soccer club|stadium|event venue|lawyer|insurance|car |auto |hostel|hotel/i;
+const BORING = /radio|institut|pedagog|urgent|emergenc|medical|doctor|store|shop|supermarket|mall|bank|naval|military|newspaper|publisher|record (label|company)|office|school|academ|universit|church|hospital|clinic|pharmac|gas station|parking|apartment|real estate|tour operator|serviced accommodation|corporate|government|embassy|consulate|airport|bus station|cemetery|dentist|gym|soccer club|stadium|event venue|lawyer|insurance|car |auto |hostel|hotel/i;
 
 /** Generic or non-date entities that leak into place results ("Cartagena de Indias", naval bases, libraries). */
-const BORING_NAME = /^(cartagena|bogot[aá]|medell[ií]n|barranquilla|cali|santa marta)( de indias)?$|naval|militar|bibliotec|library|universidad|colegio|hospital|cl[ií]nica|notar[ií]a|banco |hotel|hostal|hostel|aeropuerto|airport|school|facultad|academia|escuela|patin[oó]dromo|sociedad portuaria|espectador|edificio|barrio |residential|residencial|conjunto|condominio|colegiatura|unaula|manzana |pablo escobar|^(cl|cra|calle|carrera|av)\.? /i;
+const BORING_NAME = /^(cartagena|bogot[aá]|medell[ií]n|barranquilla|cali|santa marta)( de indias)?$|naval|militar|bibliotec|library|universidad|universitari|instituci[oó]n|instituto|caracol radio|urgencias|casa de nari[ñn]o|suboficiales|centro social|colegio|hospital|cl[ií]nica|notar[ií]a|banco |hotel|hostal|hostel|aeropuerto|airport|school|facultad|academia|escuela|patin[oó]dromo|sociedad portuaria|espectador|edificio|barrio |residential|residencial|conjunto|condominio|colegiatura|unaula|manzana |pablo escobar|^(cl|cra|calle|carrera|av)\.? /i;
 
 const genreOf = (e: RawEntity) =>
   e.tags?.find((t) => /genre:place/.test(t.id ?? t.tag_id ?? "") && t.name && t.name !== "Place")?.name;
 
+const tagsOfType = (e: RawEntity, type: string, n = 3) =>
+  [...new Set((e.tags ?? []).filter((t) => t.type === `urn:tag:${type}` && t.name).map((t) => t.name!))].filter((x) => x !== "Place").slice(0, n);
+
 export function toPlace(e: RawEntity): Place | null {
   if (e.location?.lat == null || e.location?.lon == null || e.properties?.is_closed) return null;
   const genre = genreOf(e);
-  if ((genre && BORING.test(genre)) || BORING_NAME.test(e.name)) return null;
+  const genres = (e.tags ?? []).filter((t) => /genre:place/.test(t.id ?? t.tag_id ?? t.type ?? "")).map((t) => t.name ?? "");
+  if ((genre && BORING.test(genre)) || genres.some((g) => BORING.test(g)) || BORING_NAME.test(e.name)) return null;
   return {
     id: e.entity_id,
     name: normalizeName(e.name.split(" | ")[0]),
@@ -124,6 +135,13 @@ export function toPlace(e: RawEntity): Place | null {
     rating: e.properties?.business_rating,
     priceLevel: e.properties?.price_level,
     image: e.properties?.images?.[0]?.url,
+    description: (e.properties?.short_description ?? e.properties?.description)?.slice(0, 220),
+    tags: {
+      genres: tagsOfType(e, "genre:place"),
+      cuisines: tagsOfType(e, "cuisine:qloo"),
+      ambience: tagsOfType(e, "ambience:qloo"),
+      activities: tagsOfType(e, "activity_type:qloo", 2),
+    },
   };
 }
 

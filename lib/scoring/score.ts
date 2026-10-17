@@ -1,14 +1,16 @@
-import type { Pin, ScoreResult, SharedTag, ZonedPlace, ZoneExample, ZoneStat } from "../types";
+import type { Pin, RiskLevel, ScoreResult, SharedTag, ZonedPlace, ZoneExample, ZoneStat } from "../types";
+import { zoneProfile } from "../geo/zoneProfile";
 
-/** How many top places per person we compare. */
-export const TOP_PLACES = 25;
-/** Weights of the final compatibility score. */
-export const WEIGHTS = { tags: 0.6, places: 0.4 } as const;
+/**
+ * How many favorite places per person we compare. Qloo's place lists in a city share
+ * a popular core, so a shorter list (each person's top 20) reflects taste better.
+ */
+export const TOP_PLACES = 20;
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 
 /**
- * Taste-tag similarity from Qloo /v2/insights/compare.
+ * Taste-tag affinity from Qloo /v2/insights/compare (secondary stat).
  * Qloo tag scores cluster around 0.5 (unrelated) to ~0.73 (very aligned), so we
  * rescale that band to 0-100 and dampen results backed by few shared tags.
  */
@@ -19,64 +21,89 @@ export function tagSimilarity(tags: SharedTag[]): number {
   return clamp(((mean - 0.5) / 0.23) * 100) * coverage;
 }
 
-/** Jaccard overlap (0-100) of each person's top-N recommended place ids. */
-export function placeOverlap(a: string[], b: string[]): { score: number; shared: number } {
+/**
+ * Cheating risk (0-100): of the places each person likes, the share the other
+ * doesn't, averaged over both. "53%" = 53% of the plans one likes, the other doesn't.
+ */
+export function cheatingRisk(a: string[], b: string[]): { risk: number; onlyA: number; onlyB: number; shared: number } {
   const sa = new Set(a);
   const sb = new Set(b);
   const shared = [...sa].filter((x) => sb.has(x)).length;
-  const union = new Set([...sa, ...sb]).size;
-  return { score: union ? (shared / union) * 100 : 0, shared };
+  const onlyA = sa.size - shared;
+  const onlyB = sb.size - shared;
+  if (!sa.size || !sb.size) return { risk: 100, onlyA, onlyB, shared };
+  const risk = ((onlyA / sa.size + onlyB / sb.size) / 2) * 100;
+  return { risk: Math.round(risk), onlyA, onlyB, shared };
 }
 
-/** Builds map pins: places both would pick, or only one of them. */
+export function riskLevel(risk: number): RiskLevel {
+  if (risk < 35) return "low";
+  if (risk < 60) return "medium";
+  if (risk < 80) return "high";
+  return "cheating";
+}
+
+/** Builds map pins: places both would like, or only one of them. */
 export function buildPins(pa: ZonedPlace[], pb: ZonedPlace[]): Pin[] {
   const idsB = new Set(pb.map((p) => p.id));
   const pins = new Map<string, Pin>();
   const toPin = (p: ZonedPlace, who: Pin["who"]): Pin => ({
     id: p.id, name: p.name, lat: p.lat, lon: p.lon, who, zone: p.zone, genre: p.genre, rating: p.rating, image: p.image,
+    priceLevel: p.priceLevel, description: p.description, tags: p.tags,
   });
   for (const p of pa) pins.set(p.id, toPin(p, idsB.has(p.id) ? "both" : "a"));
   for (const p of pb) if (!pins.has(p.id)) pins.set(p.id, toPin(p, "b"));
   return [...pins.values()];
 }
 
-/** Per-zone disagreement: share of a zone's places that only one person would choose. */
+/**
+ * Per-zone risk: share of a zone's places that only one person likes.
+ * "danger" zones are where one of them would go alone; "safe" zones they'd enjoy together.
+ */
 export function zoneStats(pins: Pin[]): ZoneStat[] {
-  const acc = new Map<string, { both: number; n: number; lat: number; lon: number; onlyA?: ZoneExample; onlyB?: ZoneExample }>();
-  for (const p of pins) {
-    const z = acc.get(p.zone) ?? { both: 0, n: 0, lat: 0, lon: 0 };
-    z.n++;
-    if (p.who === "both") z.both++;
-    // First pin per side = highest-ranked Qloo pick for that person in this zone.
-    if (p.who === "a" && !z.onlyA) z.onlyA = { name: p.name, genre: p.genre };
-    if (p.who === "b" && !z.onlyB) z.onlyB = { name: p.name, genre: p.genre };
-    z.lat += p.lat;
-    z.lon += p.lon;
-    acc.set(p.zone, z);
-  }
-  return [...acc.entries()]
-    .map(([zone, z]) => ({
-      zone, n: z.n, both: z.both, clashPct: Math.round(((z.n - z.both) / z.n) * 100), lat: z.lat / z.n, lon: z.lon / z.n,
-      ...(z.onlyA && { onlyA: z.onlyA }), ...(z.onlyB && { onlyB: z.onlyB }),
-    }))
-    // Most disagreements first (count of one-sided places), then the higher share.
-    .sort((x, y) => y.n - y.both - (x.n - x.both) || y.clashPct - x.clashPct || y.n - x.n);
+  const groups = new Map<string, Pin[]>();
+  for (const p of pins) groups.set(p.zone, [...(groups.get(p.zone) ?? []), p]);
+  return [...groups.entries()]
+    .map(([zone, ps]) => {
+      const both = ps.filter((p) => p.who === "both").length;
+      const a = ps.filter((p) => p.who === "a").length;
+      const b = ps.filter((p) => p.who === "b").length;
+      const riskPct = Math.round(((ps.length - both) / ps.length) * 100);
+      // First pin per side = highest-ranked Qloo pick for that person in this zone.
+      const ex = (who: Pin["who"]): ZoneExample | undefined => {
+        const p = ps.find((x) => x.who === who);
+        return p && { name: p.name, genre: p.genre };
+      };
+      const onlyA = ex("a");
+      const onlyB = ex("b");
+      return {
+        zone, n: ps.length, both, a, b, riskPct,
+        kind: (riskPct >= 50 ? "danger" : "safe") as ZoneStat["kind"],
+        lat: ps.reduce((s, p) => s + p.lat, 0) / ps.length,
+        lon: ps.reduce((s, p) => s + p.lon, 0) / ps.length,
+        profile: zoneProfile(ps),
+        ...(onlyA && { onlyA }), ...(onlyB && { onlyB }),
+      };
+    })
+    // Most one-sided places first, then higher share, then bigger zones.
+    .sort((x, y) => y.n - y.both - (x.n - x.both) || y.riskPct - x.riskPct || y.n - x.n);
 }
 
-/** Full score: 60% shared taste tags + 40% overlap of recommended places. */
+/** Full score from each person's Qloo place picks (and taste tags as a secondary stat). */
 export function score(tags: SharedTag[], placesA: ZonedPlace[], placesB: ZonedPlace[]): ScoreResult {
   const ta = placesA.slice(0, TOP_PLACES);
   const tb = placesB.slice(0, TOP_PLACES);
-  const tagScore = tagSimilarity(tags);
-  const overlap = placeOverlap(ta.map((p) => p.id), tb.map((p) => p.id));
-  const compat = Math.round(WEIGHTS.tags * tagScore + WEIGHTS.places * overlap.score);
+  const r = cheatingRisk(ta.map((p) => p.id), tb.map((p) => p.id));
   const pins = buildPins(ta, tb);
   return {
-    compat,
-    cachos: 100 - compat,
-    tagScore: Math.round(tagScore),
-    placeScore: Math.round(overlap.score),
-    shared: overlap.shared,
+    risk: r.risk,
+    level: riskLevel(r.risk),
+    onlyA: r.onlyA,
+    onlyB: r.onlyB,
+    totalA: ta.length,
+    totalB: tb.length,
+    shared: r.shared,
+    tagScore: Math.round(tagSimilarity(tags)),
     pins,
     zones: zoneStats(pins),
     topTags: [...tags].sort((x, y) => y.score - x.score).slice(0, 8),

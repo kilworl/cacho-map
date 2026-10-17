@@ -7,7 +7,7 @@ type P = { searchParams: Promise<Record<string, string>> };
 export async function generateMetadata({ searchParams }: P): Promise<Metadata> {
   const s = await searchParams;
   const q = new URLSearchParams(s).toString();
-  const title = s.l === "en" ? `${s.a} × ${s.b}: ${s.p}% taste-cheating in ${s.c || s.z}` : `${s.a} × ${s.b}: ${s.p}% de cachos en ${s.c || s.z}`;
+  const title = s.l === "en" ? `${s.a} × ${s.b}: ${s.p}% cheating risk in ${s.c || s.z}` : `${s.a} × ${s.b}: riesgo de cacho ${s.p}% en ${s.c || s.z}`;
   return { title, openGraph: { title, images: [`/api/card?${q}`] }, twitter: { card: "summary_large_image", images: [`/api/card?${q}`] } };
 }
 

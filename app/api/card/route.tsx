@@ -31,19 +31,22 @@ export async function GET(req: Request) {
           <span>×</span>
           <span style={{ color: "#2563ff" }}>{g("b", 24)}</span>
         </div>
+        <div style={{ fontSize: 60, fontWeight: 800, display: "flex", marginTop: 20 }}>{en ? "Cheating risk" : "Riesgo de cacho"}</div>
         <div style={{ fontSize: 300, fontWeight: 800, lineHeight: 0.9, display: "flex", color: "#ff3b1f", letterSpacing: -12 }}>{g("p", 3)}%</div>
-        <div style={{ fontSize: 60, fontWeight: 800, display: "flex" }}>{en ? "taste-cheating" : "de cachos"}</div>
+        <div style={{ fontSize: 30, display: "flex", marginTop: 8, fontWeight: 500 }}>
+          {en ? "of the plans one likes, the other doesn't" : "de los planes que le gustan a uno no le gustan al otro"}
+        </div>
         {zone && (
           <div style={{ display: "flex", marginTop: 22 }}>
             <div style={{ fontSize: 34, display: "flex", background: "#ffc21a", border: "4px solid #1a1410", padding: "8px 20px", transform: "rotate(-2deg)" }}>
-              {en ? `Battlefield: ${zone}` : `Zona de guerra: ${zone}`}
+              {en ? `Danger zone: ${zone}` : `Zona de peligro: ${zone}`}
             </div>
           </div>
         )}
         <div style={{ fontSize: 40, marginTop: 40, display: "flex", lineHeight: 1.25, fontWeight: 500 }}>“{g("t", 220)}”</div>
       </div>
       <div style={{ fontSize: 28, display: "flex", justifyContent: "space-between", opacity: 0.85 }}>
-        <span>{en ? "Just a joke between us" : "Es un chiste entre los dos"}</span>
+        <span>{en ? "Only cheating on plans. It's a joke" : "Solo cachos de planes. Es un chiste"}</span>
         <span>Powered by Qloo taste AI</span>
       </div>
     </div>,

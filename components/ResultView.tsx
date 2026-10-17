@@ -27,15 +27,22 @@ export function ResultView({ r, onZone, onReset }: Props) {
           <span style={{ color: WHO_COLOR.a }}>{r.a}</span> <i>×</i> <span style={{ color: WHO_COLOR.b }}>{r.b}</span>
           <small> · {r.city.name}</small>
         </p>
-        <div className="big-pct" aria-label={`${r.cachos}% ${t.cachos}`}>
-          <CountUp to={r.cachos} duration={1.6} trigger="load" className="big-num" />
-          <span className="big-sign">%</span>
-          <span className="big-label">{t.cachos}</span>
+        <div className={`risk risk--${r.level}`}>
+          <div className="big-pct" aria-label={`${t.cachos}: ${r.risk}%`}>
+            <span className="big-label">{t.cachos}:</span>
+            <CountUp to={r.risk} duration={1.6} trigger="load" className="big-num" />
+            <span className="big-sign">%</span>
+          </div>
+          <div className="risk-bar" aria-hidden="true">
+            <span style={{ width: `${Math.max(4, r.risk)}%` }} />
+            <i style={{ left: "35%" }} /><i style={{ left: "60%" }} /><i style={{ left: "80%" }} />
+          </div>
+          <span className="risk-level">{t.levels[r.level]}</span>
         </div>
-        <p className="pct-explain">{t.pctExplain(r.cachos)}</p>
+        <p className="pct-explain">{t.pctExplain(r.risk)}</p>
         <details className="how-calc">
           <summary>{t.howCalcTitle}</summary>
-          <ul>{t.howCalc(r.tagScore, r.placeScore, r.compat).map((line) => <li key={line}>{line}</li>)}</ul>
+          <ul>{t.howCalc(r.a, r.b, r.totalA, r.onlyA, r.totalB, r.onlyB, r.risk).map((line) => <li key={line}>{line}</li>)}</ul>
         </details>
         <h2 className="result-title">
           <ShinyText text={rest.join(" · ") || label} color="#1a1410" shineColor="#ff3b1f" speed={3} />
@@ -45,9 +52,8 @@ export function ResultView({ r, onZone, onReset }: Props) {
       <blockquote className="roast">{r.roast.roast}</blockquote>
 
       <div className="stats">
-        <span><b>{r.compat}%</b> {t.compat}</span>
-        <span><b>{r.tagScore}%</b> {t.tagsStat}</span>
         <span><b>{r.shared}</b> {t.placesStat}</span>
+        <span><b>{r.tagScore}%</b> {t.tagsStat}</span>
         <a className="see-map" href="#map">{t.seeMap}</a>
       </div>
 

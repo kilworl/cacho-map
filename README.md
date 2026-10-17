@@ -1,10 +1,10 @@
 # 🦌 Cacho-Map
 
-**How hard do you cheat on each other's taste?** Two people type what they like (artists, movies, shows, books). Cacho-Map uses the **Qloo Taste AI** to measure how compatible they are, maps *where in their own city* they'd fight over plans, and an AI agent roasts them in Spanish or English.
+**What's your cheating risk?** Two people type what they like (artists, movies, shows, books, food). Cacho-Map uses the **Qloo Taste AI** to find each person's favorite places in their own city and measures the **"riesgo de cacho" (cheating risk)**: how many of the plans one likes, the other doesn't. That's where one ends up going out alone... or with other company. It maps the *danger zones* and *safe zones*, and an AI agent roasts them with light cheating wordplay in Spanish or English.
 
 Live: **https://cacho-map.vercel.app** · Built for the Qloo Agentic Hackathon (2026).
 
-> "Cachos" is Colombian slang for horns (being cheated on). Here it only means *taste-cheating*: picking a different playlist, restaurant or movie. It's a consent-based joke, nicknames only.
+> "Cachos" is Colombian slang for horns, i.e. being cheated on ("le montaron los cachos"). The app's joke: if your plans don't overlap, you go out separately, and that's where "cacho" risk lives. It only ever measures plans, never real infidelity. Consent-based, nicknames only.
 
 ## Features
 
@@ -12,7 +12,10 @@ Live: **https://cacho-map.vercel.app** · Built for the Qloo Agentic Hackathon (
 - **Qloo at the core.** Entity search, taste comparison and location-aware place recommendations drive the score, the map and every joke.
 - **Zones for any city.** Neighborhoods come from Qloo place data, with nearest-neighbor and compass fallbacks (and a hand-made refinement for Cartagena).
 - **Tool-calling roast agent** (AI SDK + Vercel AI Gateway) grounded in the Qloo data, with a humor guide based on research of what couple humor actually travels on X ([docs/humor.md](docs/humor.md)).
-- **Live map.** OpenFreeMap vector tiles recolored to the app palette, animated pins, a heat layer showing the disagreement per neighborhood, popups with place info, fly-to animations.
+- **Cheating-risk meter** with levels (bajo / medio / alto / "ya hay cacho") and a "how is it calculated" breakdown with the real counts.
+- **Danger zones vs. safe zones.** Each zone card is characterized from Qloo place data (dominant place types, cuisines, ambience tags, price) and says why it's risky or safe for this couple. A cheap LLM only *phrases* those facts (strict "use only the given facts" prompt); a deterministic template is the fallback.
+- **Place popups** say what the place is (Qloo type/cuisine/short description), who it fits, and a one-line plan.
+- **Live map.** OpenFreeMap vector tiles recolored to the app palette, animated pins, a heat layer showing the cheating risk per neighborhood, fly-to animations.
 - **ES / EN** across UI and AI output, saved in `localStorage`, defaulting to the browser language.
 - Shareable 4:5 card (`next/og`) and WhatsApp share.
 
@@ -32,9 +35,11 @@ flowchart LR
   Q1 & Q2 & Q3 --> QC[lib/qloo/client<br/>retry + 24h cache]
   SVC --> Z[lib/geo/zones<br/>assignZones]
   Z --> S[lib/scoring/score<br/>pure functions]
-  S --> AG[lib/agent/roast<br/>AI SDK generateText + tools]
-  AG --> GW[(Vercel AI Gateway)]
-  AG --> SAN[lib/agent/sanitize<br/>humor contract]
+  S --> AG[lib/agent/roast<br/>agent: tools + 3 candidates]
+  AG --> J[judge<br/>flash-lite scores, drops nonsense]
+  S --> EN[lib/agent/enrich<br/>zone + place copy from Qloo facts]
+  AG & J & EN --> GW[(Vercel AI Gateway)]
+  AG --> SAN[lib/agent/sanitize<br/>humor contract + dark filter]
   SVC --> API --> UI
   UI --> CARD[app/api/card<br/>share image]
 ```
@@ -57,24 +62,27 @@ docs/humor.md        humor research and the rules the prompt follows
 
 ## How Qloo is used
 
-1. **`/search`**: each free-text taste ("Bad Bunny", "Amélie") → a Qloo entity, in parallel.
-2. **`/v2/insights/compare`**: shared taste tags between the two sets of entities → **60%** of the score.
-3. **`/v2/insights`** with `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)` and a radius around the user, personalized with `signal.interests.entities` for each person → their top 25 places. The overlap (Jaccard) is **40%** of the score, and each place's neighborhood feeds the zone breakdown.
-4. The agent's tools (`getCompatibility`, `getSharedTasteTags`, `getZoneClashes`, `getPlaces`) expose only this Qloo-derived data, so the roast always cites real tastes and real places.
+1. **`/search`** and **`/v2/tags`**: each free-text taste (normalized by a small LLM: "Mentalista" → The Mentalist, "comida mexicana" → Mexican cuisine tag) → a Qloo entity or tag, in parallel.
+2. **`/v2/insights`** with `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)` and a radius around the user, personalized per person → each person's **top 20 places**. Specific titles drive this signal; broad media categories ("video games", "superheroes") are left out of the place call so they don't make everyone like the same arcades, while cuisine tags are kept (they're about places). People who only typed categories use their tags.
+3. **`/v2/insights/compare`**: shared taste tags, shown as a secondary "taste affinity" stat and given to the agent as joke material.
+4. Place tags (`genre:place`, `cuisine`, `ambience`, `activity_type`), `short_description` and `price_level` feed the zone profiles and place popups.
+5. The agent's tools (`getRisk`, `getSharedTasteTags`, `getZones`, `getPlaces`) expose only this Qloo-derived data, so the roast always cites real tastes and real places.
 
 The compare call and both place calls run in parallel. Qloo calls retry on 429/5xx with exponential backoff and are cached for 24 h. No raw Qloo data is stored in the repo.
 
 ## Scoring
 
 ```
-tagScore   = rescale(mean Qloo tag score, 0.50 → 0, 0.73 → 100) × min(1, tags / 40)
-placeScore = |top25(A) ∩ top25(B)| / |top25(A) ∪ top25(B)| × 100
-compat     = round(0.6 × tagScore + 0.4 × placeScore)
-cachos     = 100 − compat
-zone disagreement = places in the zone only one of them would pick / places in the zone
+A = top 20 Qloo places for person 1, B = top 20 for person 2
+risk  = round( ( |A \ B| / |A|  +  |B \ A| / |B| ) / 2 × 100 )
+        "X% of the plans one likes, the other doesn't"
+level = bajo < 35 ≤ medio < 60 ≤ alto < 80 ≤ "ya hay cacho"
+zone risk = places in the zone only one of them likes / places in the zone
+zone kind = danger if zone risk ≥ 50%, else safe (both would go)
+tag affinity (secondary) = rescale(mean Qloo tag score, 0.50 → 0, 0.73 → 100) × min(1, tags / 40)
 ```
 
-The roast may only quote the overall % (zone figures are shown as bars, never as numbers in jokes).
+The roast may only quote the overall %. The agent writes 3 candidates; `gemini-2.5-flash-lite` scores coherence, wordplay, funniness and safety, drops anything incoherent or unsafe, and the best one is shown.
 
 ## Run locally
 
@@ -82,7 +90,7 @@ The roast may only quote the overall % (zone figures are shown as bars, never as
 cp .env.example .env.local   # add QLOO_API_KEY and, locally, AI_GATEWAY_API_KEY
 npm install                  # also copies the MapLibre worker into public/vendor
 npm run dev
-npm test                     # vitest: scoring, zones, sanitizer, name normalization
+npm test                     # vitest: risk scoring, zones, sanitizer, zone/place templates, judge
 npm run lint && npm run typecheck
 ```
 
@@ -90,7 +98,7 @@ On Vercel the AI Gateway authenticates with OIDC. `AI_MODEL` overrides the defau
 
 ## Safety
 
-Nicknames only and an explicit consent checkbox. Jokes are about tastes only: never real infidelity, bodies, sexuality, religion, politics, real third parties, or trashing a business. The output sanitizer enforces the % rule and strips banned phrasing.
+Nicknames only and an explicit consent checkbox. Jokes are light cheating *wordplay* about plans and tastes: never real accusations, explicit content, bodies, sexuality, religion, politics, real third parties, or trashing a business. The output sanitizer enforces the % rule, strips banned phrasing and drops any sentence with dark or violent imagery.
 
 ## Credits
 

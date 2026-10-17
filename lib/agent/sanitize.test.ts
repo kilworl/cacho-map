@@ -28,10 +28,15 @@ describe("cleanLine", () => {
 describe("sanitizeRoast", () => {
   it("forces the overall % label at the start of the title", () => {
     const r = sanitizeRoast({ title: "Zona roja · Getsemaní", roast: "x", plan: "y" }, 70, "es");
-    expect(r.title).toBe("70% de cachos · Getsemaní");
-    expect(sanitizeRoast({ title: "Bad", roast: "x", plan: "y" }, 40, "en", "Manga").title).toBe("40% taste-cheating · Manga");
+    expect(r.title).toBe("Riesgo de cacho: 70% · Getsemaní");
+    expect(sanitizeRoast({ title: "Bad", roast: "x", plan: "y" }, 40, "en", "Manga").title).toBe("Cheating risk: 40% · Manga");
   });
   it("keeps a valid title", () => {
-    expect(sanitizeRoast({ title: "33% de cachos · paz armada", roast: "x", plan: "y" }, 33, "es").title).toBe("33% de cachos · paz armada");
+    expect(sanitizeRoast({ title: "Riesgo de cacho: 33% · cachos de película", roast: "x", plan: "y" }, 33, "es").title).toBe("Riesgo de cacho: 33% · cachos de película");
+  });
+  it("drops dark or violent sentences", () => {
+    expect(cleanLine("Caro se tira por la ventana. Dani pide tacos.", 50)).toBe("Dani pide tacos.");
+    expect(cleanLine("Dani would rather die than watch it. Caro picks the show.", 50)).toBe("Caro picks the show.");
+    expect(cleanLine("A Caro le montaron los cachos con queso.", 50)).toBe("A Caro le montaron los cachos con queso.");
   });
 });
