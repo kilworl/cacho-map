@@ -112,7 +112,7 @@ export function CachoApp() {
       </main>
 
       <footer className="foot">
-        {t.footer} <a href="https://www.qloo.com" target="_blank" rel="noreferrer">Qloo</a> · UI bits from{" "}
+        {t.footer} <a href="https://www.qloo.com" target="_blank" rel="noreferrer">Qloo</a> · {t.uiBits}{" "}
         <a href="https://reactbits.dev" target="_blank" rel="noreferrer">React Bits</a> ·{" "}
         <a href="https://github.com/kilworl/cacho-map" target="_blank" rel="noreferrer">GitHub</a>
       </footer>
