@@ -150,6 +150,15 @@ export default function CachoMap({ label, center, pins, zones, labels, focus }: 
     };
   }, [pins, zones, labels]);
 
+  // MapLibre's control tooltips are English by default; keep them in the UI language.
+  useEffect(() => {
+    const es = label === "Mapa";
+    const set = (sel: string, txt: string) => el.current?.querySelectorAll<HTMLElement>(sel).forEach((n) => { n.title = txt; n.setAttribute("aria-label", txt); });
+    set(".maplibregl-ctrl-zoom-in", es ? "Acercar" : "Zoom in");
+    set(".maplibregl-ctrl-zoom-out", es ? "Alejar" : "Zoom out");
+    set(".maplibregl-ctrl-attrib-button", es ? "Créditos del mapa" : "Toggle attribution");
+  }, [label]);
+
   useEffect(() => {
     if (focus) map.current?.flyTo({ center: [focus.lon, focus.lat], zoom: 15, speed: 1.2, curve: 1.5, essential: true });
   }, [focus]);
