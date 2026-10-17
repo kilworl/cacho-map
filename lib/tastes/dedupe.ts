@@ -40,7 +40,9 @@ export function sameTaste(x: TasteEntity, y: TasteEntity, cross = false): boolea
   const px = x.places ?? [];
   const py = y.places ?? [];
   const same = !!px.length && placeKey(x) === placeKey(y);
-  if (!sx && !sy) return jaccard(px, py) >= 0.5;
+  // Two signal-less activities: same place kinds, or mostly the same with 2+ kinds each ("caminar por el Centro" ~ "caminar por la ciudad amurallada").
+  // Not [cafe] vs [bookstore, cafe]: books aren't cafés.
+  if (!sx && !sy) return same || (Math.min(px.length, py.length) >= 2 && jaccard(px, py) >= 0.66);
   if (sx && sy) return (same && x.kind === "food" && y.kind === "food") || (cross && (titleOfGenre(x, y) || titleOfGenre(y, x)));
   // One signal-less activity vs a genre/food with the same place kinds ("bailar salsa" ~ salsa). Two different artists never match this way.
   const withSignal = sx ? x : y;

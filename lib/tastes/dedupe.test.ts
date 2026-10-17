@@ -54,3 +54,13 @@ describe("pairTastes", () => {
     expect(p.b[0].pair).toBeUndefined();
   });
 });
+
+describe("activities", () => {
+  it("cafés and novels aren't the same taste even if both lead to cafés", () => {
+    expect(mergeDuplicates([act("quiet cafés", "cafés tranquilos", ["cafe"]), act("novels", "novelas", ["bookstore", "cafe"])])).toHaveLength(2);
+  });
+  it("two ways to say 'walking around the old town' pair up", () => {
+    const p = pairTastes([act("walking downtown", "caminar por el Centro", ["park", "attraction"])], [act("walking the walled city", "caminar por la ciudad amurallada", ["attraction", "park"])]);
+    expect(p.a[0].pair).toBe(0);
+  });
+});
