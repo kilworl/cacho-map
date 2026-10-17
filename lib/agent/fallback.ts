@@ -11,17 +11,17 @@ export function fallbackRoast(a: string, b: string, r: ScoreResult, lang: Lang):
   const both = name("both");
   if (lang === "es") {
     return {
-      title: zone ? `${label} · la pelea es en ${zone}` : label,
+      title: zone ? `${label} · donde menos coinciden: ${zone}` : label,
       roast: onlyA && onlyB
-        ? `${a} propone ${onlyA}, ${b} contraataca con ${onlyB}. ${r.cachos}% de cachos: no es una pareja, es una negociación sindical.`
+        ? `${a} elegiría ${onlyA} y ${b} se iría para ${onlyB}. Con ${r.cachos}% de cachos, el que escoja el plan del sábado tiene que negociar.`
         : `${a} y ${b} comparten ${r.shared} lugares y cero playlists. ${r.cachos}% de cachos, firmado por Qloo.`,
-      plan: both ? `Plan sin pelea: ${both}. El que escoja la música paga.` : "Plan sin pelea: caminar y que nadie ponga música.",
+      plan: both ? `Plan donde coinciden: ${both}. El que escoja la música paga.` : "Plan donde coinciden: caminar y que nadie ponga música.",
     };
   }
   return {
-    title: zone ? `${label} · ${zone} is the battlefield` : label,
+    title: zone ? `${label} · least in sync: ${zone}` : label,
     roast: onlyA && onlyB
-      ? `${a} suggests ${onlyA}, ${b} counters with ${onlyB}. ${r.cachos}% taste-cheating: less a couple, more a hostage negotiation.`
+      ? `${a} would pick ${onlyA}, ${b} would head to ${onlyB}. At ${r.cachos}% taste-cheating, whoever plans Saturday has some convincing to do.`
       : `${a} and ${b} share ${r.shared} places and zero playlists. ${r.cachos}% taste-cheating, certified by Qloo.`,
     plan: both ? `Truce plan: ${both}. Whoever picks the music pays.` : "Truce plan: a walk where nobody controls the aux.",
   };

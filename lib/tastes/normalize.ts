@@ -2,7 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { TasteQuery } from "../types";
 import { ENTITY_TYPES, heuristicNormalize } from "./categories";
-import { modelId } from "../agent/model";
+import { normalizeModelId } from "../agent/model";
 
 const Schema = z.object({
   items: z.array(
@@ -28,7 +28,7 @@ export async function normalizeTastes(inputs: string[], timeoutMs = 5000): Promi
   if (!inputs.length) return [];
   try {
     const res = await generateText({
-      model: modelId(),
+      model: normalizeModelId(),
       system: SYSTEM,
       prompt: JSON.stringify(inputs),
       output: Output.object({ schema: Schema }),

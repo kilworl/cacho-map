@@ -6,7 +6,7 @@ import { score } from "../scoring/score";
 import { generateRoast } from "../agent/roast";
 import { fallbackRoast } from "../agent/fallback";
 
-const AGENT_TIMEOUT_MS = 14_000;
+const AGENT_TIMEOUT_MS = 20_000;
 
 export interface MatchInput {
   a: { nick: string; tastes: string[] };
