@@ -85,7 +85,7 @@ async function judge(lang: Lang, cands: string[], context: string, signal?: Abor
       temperature: 0,
       maxRetries: 1,
       abortSignal: signal ? AbortSignal.any([signal, AbortSignal.timeout(7000)]) : AbortSignal.timeout(7000),
-      providerOptions: { google: { thinkingConfig: { thinkingBudget: 256 } } },
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     } as Parameters<typeof generateText>[0]);
     return (res as unknown as { output?: z.infer<typeof JudgeSchema> }).output ?? null;
   } catch (e) {

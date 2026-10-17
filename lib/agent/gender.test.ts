@@ -12,6 +12,9 @@ describe("fixGender", () => {
   it("uses a neutral phrasing for elle", () => {
     expect(fixGender("Caro se iría sola a Doña Lola.", [caro("n"), dani("n")], "es")).toBe("Caro se iría sin compañía a Doña Lola.");
   });
+  it("handles infinitives", () => {
+    expect(fixGender("Si a Dani se le ocurre salir solo, ojo.", [caro("f"), dani("n")], "es")).toBe("Si a Dani se le ocurre salir sin compañía, ojo.");
+  });
   it("keeps the adverb solo (only)", () => {
     expect(fixGender("Caro solo quiere tacos.", [caro("n"), dani("n")], "es")).toBe("Caro solo quiere tacos.");
   });

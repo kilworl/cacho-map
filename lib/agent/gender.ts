@@ -17,7 +17,7 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const sentences = (t: string) => t.split(/(?<=[.!?…])\s+/).filter(Boolean);
 
 /** Verb + "solo/sola" = "alone" (not the adverb "solo" = only). */
-const ALONE = /\b((?:se\s+)?(?:iría|irá|va|iba|vaya|fue|sale|saldría|salió|sale|queda|quedaría|quedó|termina|terminaría|terminó|anda|andaría|está|estaría|estará|vendría|viene|llega|llegaría))\s+(solo|sola|solito|solita)\b/giu;
+const ALONE = /\b((?:se\s+)?(?:iría|irá|va|iba|vaya|fue|ir|irse|sale|saldría|salió|salir|queda|quedaría|quedó|quedarse|quedar|termina|terminaría|terminó|terminar|anda|andaría|andar|está|estaría|estará|estar|vendría|viene|venir|llega|llegaría|llegar))\s+(solo|sola|solito|solita)\b/giu;
 const ES_GENDERED: [RegExp, string, string][] = [
   // masc, fem pairs for common adjectives about a person
   [/\b(enamorad[oa])\b/giu, "enamorado", "enamorada"],

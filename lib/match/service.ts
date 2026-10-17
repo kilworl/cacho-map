@@ -68,8 +68,10 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   let toolCalls: string[] = [];
   let judged: { roast: string; total: number; dropped: boolean }[] = [];
   let agent: MatchResult["agent"] = "llm";
+  // Jokes use the taste as the user typed it in Spanish ("Rápido y furioso"), Qloo's name in English.
+  const jokeName = (e: TasteEntity) => (lang === "es" ? e.input : e.name.replace(/\s*\(.*\)$/, "").replace(/:.*$/, ""));
   const people = { a: { nick: a.nick, pronoun: a.pronoun ?? "n" }, b: { nick: b.nick, pronoun: b.pronoun ?? "n" } } as const;
-  const input = { a: people.a, b: people.b, tastesA: ra.found.map((e) => e.name), tastesB: rb.found.map((e) => e.name), score: s, lang, city: city.name };
+  const input = { a: people.a, b: people.b, tastesA: ra.found.map(jokeName), tastesB: rb.found.map(jokeName), score: s, lang, city: city.name };
   const ctx = { a: a.nick, b: b.nick, pa: people.a, pb: people.b, tastesA: input.tastesA, tastesB: input.tastesB, lang };
   // Zone/place descriptions (cheap model) run in parallel with the roast agent.
   const described = describe(s, ctx).then((r) => ((timings.describe = Date.now() - t2), r));
