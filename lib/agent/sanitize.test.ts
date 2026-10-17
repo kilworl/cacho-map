@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLine, inLang, sanitizeRoast } from "./sanitize";
+import { cleanLine, fixPunctuation, inLang, sanitizeRoast } from "./sanitize";
 
 describe("cleanLine", () => {
   it("drops sentences quoting zone percentages but keeps the overall one", () => {
@@ -45,5 +45,26 @@ describe("inLang", () => {
   it("detects a Spanish roast on an English request", () => {
     expect(inLang("Dani adora Harry Potter. Con ese 90% de riesgo, no es un prisionero, solo tiene otro plan.", "en")).toBe(false);
     expect(inLang("Caro loves The Mentalist, so none of Dani's alibis survive a Friday.", "en")).toBe(true);
+  });
+});
+
+describe("punctuation and innuendo", () => {
+  it("fixes double periods and spacing", () => {
+    expect(fixPunctuation("Ana se fue.. y Leo ,  tranquilo .")).toBe("Ana se fue… y Leo, tranquilo.");
+    expect(fixPunctuation("Plan:cine,luego tacos...Fin")).toBe("Plan: cine, luego tacos… Fin");
+    expect(cleanLine("Leo se queda en casa. Ana se va...", 40)).toBe("Leo se queda en casa. Ana se va…");
+  });
+  it("drops sexual innuendo, including in the title", () => {
+    expect(cleanLine("Ana ve Fast & Furious. Todo con final feliz.. para él.", 40)).toBe("Ana ve Fast & Furious.");
+    expect(cleanLine("Leo wants sushi. Ana wants a happy ending.", 40)).toBe("Leo wants sushi.");
+    expect(sanitizeRoast({ title: "Riesgo de cacho: 40% · final feliz para él.", roast: "x y z.", plan: "" }, 40, "es", "Getsemaní").title).toBe("Riesgo de cacho: 40% · Getsemaní");
+    expect(sanitizeRoast({ title: "Riesgo de cacho: 40% · cada quien su plan.", roast: "x", plan: "" }, 40, "es").title).toBe("Riesgo de cacho: 40% · cada quien su plan");
+  });
+});
+
+describe("title cleanup", () => {
+  it("drops an empty trailing segment and keeps quotes tight", () => {
+    expect(sanitizeRoast({ title: "Riesgo de cacho: 40% · Comida para uno ·  ", roast: "Ana sale sola a comer tacos y Leo ni se entera.", plan: "" }, 40, "es").title).toBe("Riesgo de cacho: 40% · Comida para uno");
+    expect(fixPunctuation("un 'creep,' de verdad")).toBe("un 'creep,' de verdad");
   });
 });

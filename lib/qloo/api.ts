@@ -20,6 +20,7 @@ interface RawEntity {
     is_closed?: boolean;
     short_description?: string;
     description?: string;
+    akas?: { language?: string; value?: string }[];
   };
 }
 interface RawTag {
@@ -73,7 +74,12 @@ async function searchEntity(q: TasteQuery): Promise<TasteEntity | null> {
   const run = async (types: string) => entitiesOf(await qlooGet("/search", { query: q.query, types, take: 3 }))[0];
   // Restrict to the type the normalizer detected (Mentalista -> tv_show), then fall back to any type.
   const e = (q.type ? await run(`urn:entity:${q.type}`) : undefined) ?? (await run(ALL_TYPES));
-  return e ? { id: e.entity_id, name: e.name, type: (e.types?.[0] ?? e.subtype ?? "").replace("urn:entity:", ""), input: q.input } : null;
+  if (!e) return null;
+  // Latin-script alternate titles (e.g. Spanish release names) and Qloo's description: the only
+  // facts about this taste a joke may cite (see lib/agent/ownership).
+  const akas = [...new Set((e.properties?.akas ?? []).map((a) => a.value ?? "").filter((v) => v && /^[\p{Script=Latin}\d\s&'’:.,!¡?¿-]+$/u.test(v)))].slice(0, 12);
+  const facts = [e.properties?.short_description, e.properties?.description].filter(Boolean).join(" ").slice(0, 600);
+  return { id: e.entity_id, name: e.name, type: (e.types?.[0] ?? e.subtype ?? "").replace("urn:entity:", ""), input: q.input, akas, facts };
 }
 
 async function searchTag(q: TasteQuery): Promise<TasteEntity | null> {

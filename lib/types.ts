@@ -36,6 +36,10 @@ export interface TasteEntity {
   type: string;
   /** What the person actually typed. */
   input: string;
+  /** Alternate titles from Qloo (Latin script). */
+  akas?: string[];
+  /** Qloo short description / description text. */
+  facts?: string;
 }
 
 export interface ResolvedTastes {
@@ -166,7 +170,7 @@ export interface MatchResult extends ScoreResult {
   agent: "llm" | "fallback";
   toolCalls: string[];
   /** Roast candidates with judge totals (-1 = dropped as nonsense/unsafe). */
-  judged?: { roast: string; total: number; dropped: boolean }[];
+  judged?: { title?: string; roast: string; total: number; dropped: boolean; reason?: string }[];
   pronounA?: Pronoun;
   pronounB?: Pronoun;
   /** How many "popular for anyone" places were left out of the comparison. */

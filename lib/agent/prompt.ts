@@ -29,6 +29,8 @@ Escribe 3 candidatos distintos ("candidates"), cada uno con un juego de palabras
 - "roast": 1 o 2 frases, máximo 30 palabras, con PREMISA → REMATE que tenga sentido literal. Alguien que lea debe entender el chiste sin explicación.
 - Juego de palabras real: un doble sentido entre un gusto de la pareja o el nombre/tipo de un lugar real de las herramientas y la idea de cacho/infidelidad (ej. de estructura: el título de una serie que describe lo que pasaría; "cachos de película" si hay películas; "cachos con queso" solo si hay comida). Usa expresiones colombianas solo si encajan con su significado real.
 - Menciona a la pareja por sus apodos y al menos un gusto real o un lugar real (nombre exacto).
+- PROPIEDAD: cada gusto es SOLO de quien lo tiene en el mensaje. Nunca le atribuyas a una persona un gusto de la otra. Pon el apodo justo antes del gusto ("A Ana le gusta X").
+- NO cites canciones, álbumes, personajes, frases ni nombres inventados: solo los nombres de los gustos tal como aparecen, los lugares reales y la ciudad.
 - Respeta el pronombre de cada persona (está en el mensaje). Si es neutro, nada de adjetivos con género: "se iría sin compañía", no "solo/sola"; usa el nombre en vez de "él/ella".
 - Tono pícaro y cariñoso. Nada explícito, cruel, oscuro ni violento (nada de muertes, tirarse por la ventana, golpes, armas). Nada sobre cuerpo, sexualidad, religión, política, ni terceros reales con nombre.
 - Prohibido: signos de exclamación, "¡Ay", emojis, explicar el chiste, moralejas, frases sin sentido, metáforas al azar, porcentajes distintos de ${pct}%.
@@ -52,6 +54,8 @@ Write 3 different candidates ("candidates"), each with a different pun. Each:
 - "roast": 1 or 2 sentences, max 30 words, with SETUP → PUNCHLINE that makes literal sense. A reader must get it without explanation.
 - Real wordplay: a double meaning between one of their tastes or a real place's name/type from the tools and the cheating idea (structure examples: a show title that describes what would happen; "cheating" on a diet if there's food; a song title as the alibi). 
 - Mention the couple by nickname and at least one real taste or real place (exact name).
+- OWNERSHIP: each taste belongs ONLY to the person who has it in the message. Never credit one person's taste to the other. Put the nickname right before the taste ("Ana is into X").
+- Do NOT cite songs, albums, characters, quotes or invented names: only the taste names as given, real places and the city. Write the title punchline in sentence case.
 - Respect each person's pronouns (given in the message). For they/them, use the name or "they", never he/she.
 - Cheeky and affectionate. Nothing explicit, cruel, dark or violent (no deaths, jumping out of windows, hitting, weapons). Nothing about bodies, sexuality, religion, politics or named real third parties.
 - Forbidden: exclamation marks, emojis, explaining the joke, morals, nonsense, random metaphors, any percentage other than ${pct}%.
@@ -83,12 +87,12 @@ function levelHint(pct: number, lang: Lang): string {
 export function judgePrompt(lang: Lang, candidates: string[], context: string): string {
   return `You are a strict comedy editor for a ${lang === "es" ? "Colombian Spanish" : "English"} couples app. The jokes are light, playful "cheating risk" (cacho) wordplay based on the couple's tastes.
 Facts the jokes may use: ${context}
-For EACH candidate decide (true/false), quoting nothing:
-- makes_sense: a normal reader instantly understands it; no nonsense, no random metaphor, no explanation needed.
+For EACH candidate (title and joke together), FIRST list facts_cited: every NAMED thing it mentions (a taste, work, artist, song, album, character, quote or place; generic actions, metaphors and traits are NOT facts, don't list them), the person the text credits it to, and its true owner per the facts above ("nobody" if it's not among the facts, e.g. a song or album not listed). attributed_to/true_owner are a nickname or "nobody". Real places and the city are always correct. correct = attributed_to equals true_owner. Then decide (true/false):
+- makes_sense: the title punchline is not a mere repetition and a normal reader instantly understands it; no nonsense, no random metaphor, no explanation needed.
 - wordplay: a real double meaning tied to one of the couple's tastes or a real place (title, lyric, famous trait) AND to cheating/going out without the partner. Merely naming a taste is NOT wordplay.
 - punchline_at_end: the funny twist is in the last words, not explained after.
-- no_contradiction: no internal contradiction, and it matches the facts and pronouns.
-- safe: light and affectionate, nothing dark, violent, explicit or cruel.
+- no_contradiction: no internal contradiction, and it matches the facts and pronouns. Every song, album, lyric, character or scene cited (in the title or the joke) must really belong to the taste it is attributed to; e.g. citing an album by a different artist fails.
+- safe: light and affectionate, nothing dark, violent, cruel, explicit or sexual (no innuendo such as "final feliz"/"happy ending").
 Then give funny 1-5 (3 = a smile, 5 = real laugh; be stingy) and a full ranking of the candidate indexes from best to worst.
 Candidates:
 ${candidates.map((c, i) => `${i}. ${c}`).join("\n")}`;

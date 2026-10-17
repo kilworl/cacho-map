@@ -10,11 +10,11 @@ import type { Pronoun, TasteEntity } from "../types";
 const MAX_PLACE_INPUTS = 6;
 const inputKind = (e: TasteEntity): InputKind =>
   e.type !== "tag" ? "title" : e.id.startsWith("urn:tag:cuisine") ? "cuisine" : "category";
-import { generateRoast } from "../agent/roast";
+import { generateRoast, type Judged } from "../agent/roast";
 import { fallbackRoast } from "../agent/fallback";
 import { describe } from "../agent/enrich";
 
-const AGENT_TIMEOUT_MS = 30_000;
+const AGENT_TIMEOUT_MS = 35_000;
 
 export interface MatchInput {
   a: { nick: string; tastes: string[]; pronoun?: Pronoun };
@@ -66,29 +66,31 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   const s = scored;
   let roast;
   let toolCalls: string[] = [];
-  let judged: { roast: string; total: number; dropped: boolean }[] = [];
+  let judged: Judged[] = [];
+  let usedTemplate = false;
   let agent: MatchResult["agent"] = "llm";
   // Jokes use the taste as the user typed it in Spanish ("Rápido y furioso"), Qloo's name in English.
   const jokeName = (e: TasteEntity) => (lang === "es" ? e.input : e.name.replace(/\s*\(.*\)$/, "").replace(/:.*$/, ""));
   const people = { a: { nick: a.nick, pronoun: a.pronoun ?? "n" }, b: { nick: b.nick, pronoun: b.pronoun ?? "n" } } as const;
-  const input = { a: people.a, b: people.b, tastesA: ra.found.map(jokeName), tastesB: rb.found.map(jokeName), score: s, lang, city: city.name };
+  const input = { a: people.a, b: people.b, tastesA: ra.found.map(jokeName), tastesB: rb.found.map(jokeName), entitiesA: ra.found, entitiesB: rb.found, score: s, lang, city: city.name };
   const ctx = { a: a.nick, b: b.nick, pa: people.a, pb: people.b, tastesA: input.tastesA, tastesB: input.tastesB, lang };
   // Zone/place descriptions (cheap model) run in parallel with the roast agent.
   const described = describe(s, ctx).then((r) => ((timings.describe = Date.now() - t2), r));
   try {
     // One quick retry for transient gateway errors; hard cap so the user never waits on a stuck model.
     try {
-      ({ roast, toolCalls, judged } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
+      ({ roast, toolCalls, judged, usedTemplate } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
     } catch (e) {
       if (Date.now() - t2 > AGENT_TIMEOUT_MS / 3 || (e as Error).message === "no acceptable roast") throw e;
       console.warn("agent retry:", (e as Error).message);
-      ({ roast, toolCalls, judged } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
+      ({ roast, toolCalls, judged, usedTemplate } = await generateRoast({ ...input, signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) }));
     }
   } catch (e) {
     console.error("agent failed, using fallback:", (e as Error).message);
-    roast = fallbackRoast(people.a, people.b, s, lang);
+    roast = fallbackRoast(people.a, people.b, s, lang, input.tastesA, input.tastesB);
     agent = "fallback";
   }
+  if (usedTemplate) agent = "fallback";
   timings.agent = Date.now() - t2;
   const full = await described;
   timings.total = Date.now() - t0;

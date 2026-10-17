@@ -39,3 +39,19 @@ export function buildTools(r: ScoreResult, a: string, b: string) {
     }),
   };
 }
+
+/** Same Qloo data as the tools, in one object (used for the faster no-tools regeneration round). */
+export function toolSnapshot(r: ScoreResult, a: string, b: string) {
+  const describe = (p: ScoreResult["pins"][number]) => ({ name: p.name, neighborhood: p.zone, kind: p.tags?.genres?.[0] ?? p.genre ?? null });
+  const places = (who: "a" | "b" | "both") => r.pins.filter((p) => p.who === who).slice(0, 5).map(describe);
+  return {
+    CHEATING_RISK_PCT: r.risk,
+    level: r.level,
+    sharedTasteTags: r.topTags.slice(0, 5).map((t) => t.name),
+    dangerZones: r.zones.filter((z) => z.kind === "danger").slice(0, 3).map((z) => z.zone),
+    safeZones: r.zones.filter((z) => z.kind === "safe").slice(0, 2).map((z) => z.zone),
+    [`placesOnly_${a}`]: places("a"),
+    [`placesOnly_${b}`]: places("b"),
+    placesBoth: places("both"),
+  };
+}

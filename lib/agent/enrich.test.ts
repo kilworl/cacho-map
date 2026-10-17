@@ -30,7 +30,7 @@ describe("templatePlace", () => {
 });
 
 const v = (index: number, over: Partial<Verdict> = {}): Verdict => ({
-  index, makes_sense: true, wordplay: true, punchline_at_end: true, no_contradiction: true, safe: true, funny: 3, ...over,
+  index, facts_cited: [], makes_sense: true, wordplay: true, punchline_at_end: true, no_contradiction: true, safe: true, funny: 3, ...over,
 });
 
 describe("judge selection", () => {

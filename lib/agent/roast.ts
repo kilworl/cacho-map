@@ -1,7 +1,9 @@
 import { generateText, isStepCount, Output } from "ai";
 import { z } from "zod";
 import type { Lang, Roast, ScoreResult } from "../types";
-import { buildTools } from "./tools";
+import { buildTools, toolSnapshot } from "./tools";
+import { checkJoke, checkReferences, fold, type OwnershipCtx } from "./ownership";
+import type { TasteEntity } from "../types";
 import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
 import { cleanLine, inLang, sanitizeRoast } from "./sanitize";
 import { judgeModelId, modelId } from "./model";
@@ -19,6 +21,9 @@ const RoastSchema = z.object({
 });
 const Verdict = z.object({
   index: z.number().int(),
+  facts_cited: z
+    .array(z.object({ fact: z.string(), attributed_to: z.string(), true_owner: z.string(), correct: z.boolean() }))
+    .describe("Every taste, work, song, place or trait the title+joke cites, who the joke credits it to, who really has it"),
   makes_sense: z.boolean(),
   wordplay: z.boolean(),
   punchline_at_end: z.boolean(),
@@ -34,6 +39,9 @@ interface RoastInput {
   b: Person;
   tastesA: string[];
   tastesB: string[];
+  /** Resolved Qloo entities per person, for the ownership check. */
+  entitiesA: TasteEntity[];
+  entitiesB: TasteEntity[];
   score: ScoreResult;
   lang: Lang;
   city: string;
@@ -41,25 +49,30 @@ interface RoastInput {
 }
 
 export interface Judged {
+  title?: string;
   roast: string;
   total: number;
   dropped: boolean;
+  /** Why it was rejected (deterministic check or judge). */
+  reason?: string;
 }
 
 export interface RoastOutput {
   roast: Roast;
   toolCalls: string[];
   judged: Judged[];
+  /** True when every candidate failed and the safe template was used. */
+  usedTemplate: boolean;
 }
 
 /** Minimum funny score to accept a candidate that passes every criterion. */
 export const MIN_FUNNY = 3;
 /** Only regenerate if the first round finished within this budget. */
-const REGEN_BUDGET_MS = 9_000;
+const REGEN_BUDGET_MS = 14_000;
 
 /** A candidate passes only if it meets every criterion and is at least mildly funny. */
 export function passes(v?: Verdict): boolean {
-  return !!v && v.makes_sense && v.wordplay && v.punchline_at_end && v.no_contradiction && v.safe && v.funny >= MIN_FUNNY;
+  return !!v && (v.facts_cited ?? []).every((f) => f.correct) && v.makes_sense && v.wordplay && v.punchline_at_end && v.no_contradiction && v.safe && v.funny >= MIN_FUNNY;
 }
 
 /** Ranking position (lower is better) used to break ties between passing candidates. */
@@ -84,8 +97,9 @@ async function judge(lang: Lang, cands: string[], context: string, signal?: Abor
       prompt: judgePrompt(lang, cands, context),
       temperature: 0,
       maxRetries: 1,
-      abortSignal: signal ? AbortSignal.any([signal, AbortSignal.timeout(7000)]) : AbortSignal.timeout(7000),
-      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+      abortSignal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000),
+      // Reasoning on: the judge has to list facts and owners before deciding.
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 1024 } } },
     } as Parameters<typeof generateText>[0]);
     return (res as unknown as { output?: z.infer<typeof JudgeSchema> }).output ?? null;
   } catch (e) {
@@ -94,14 +108,32 @@ async function judge(lang: Lang, cands: string[], context: string, signal?: Abor
   }
 }
 
-async function candidates(input: RoastInput, toolCalls: string[]) {
+export function ownershipCtx(input: RoastInput): OwnershipCtx {
+  const { a, b, tastesA, tastesB, entitiesA, entitiesB, score, city } = input;
+  return {
+    a: { nick: a.nick, tastes: entitiesA, shown: tastesA },
+    b: { nick: b.nick, tastes: entitiesB, shown: tastesB },
+    vocab: [city, ...score.pins.map((p) => p.name), ...score.zones.map((z) => z.zone), ...score.topTags.map((t) => t.name)],
+  };
+}
+
+/** English titles often come in Title Case; lowercase everything that isn't a known proper name. */
+function sentenceCaseTitle(title: string, lang: Lang, ctx: OwnershipCtx): string {
+  if (lang !== "en" || !title.includes("·")) return title;
+  const [label, ...rest] = title.split(" · ");
+  const known = new Set([ctx.a, ctx.b].flatMap((p) => [p.nick, ...p.tastes.flatMap((e) => [e.name, e.input]), ...(p.shown ?? [])]).concat(ctx.vocab).flatMap((x) => x.split(/\s+/)).map((w) => w.toLowerCase().replace(/['’]s$/, "")));
+  const tail = rest.join(" · ").split(/\s+/).map((w, i) => (i === 0 || known.has(w.toLowerCase().replace(/['’]s$/, "").replace(/[^\p{L}\p{N}]/gu, "")) ? w : w.toLowerCase())).join(" ");
+  return `${label} · ${tail}`;
+}
+
+async function candidates(input: RoastInput, toolCalls: string[], useTools: boolean) {
   const { a, b, tastesA, tastesB, score, lang, city, signal } = input;
+  const data = useTools ? "" : `\n\nDatos de Qloo (Qloo data), ya consultados: ${JSON.stringify(toolSnapshot(score, a.nick, b.nick))}`;
   const res = await generateText({
     model: modelId(),
-    tools: buildTools(score, a.nick, b.nick),
-    stopWhen: isStepCount(4),
+    ...(useTools ? { tools: buildTools(score, a.nick, b.nick), stopWhen: isStepCount(4) } : {}),
     output: Output.object({ schema: RoastSchema }),
-    system: systemPrompt(score.risk, lang, city, pickShots([...tastesA, ...tastesB], lang)),
+    system: systemPrompt(score.risk, lang, city, pickShots([...tastesA, ...tastesB], lang)).replace(/^(Primero llama tus herramientas|First call your tools).*$/m, useTools ? "$&" : "") + data,
     prompt: userPrompt(a, b, tastesA, tastesB, lang),
     temperature: 1,
     abortSignal: signal,
@@ -112,11 +144,21 @@ async function candidates(input: RoastInput, toolCalls: string[]) {
   } as Parameters<typeof generateText>[0]);
   const out = (res as unknown as { output?: z.infer<typeof RoastSchema> }).output;
   const people = [a, b];
+  const own = ownershipCtx(input);
+  const rejected: Judged[] = [];
   const cands = (out?.candidates ?? [])
     .map((c) => sanitizeRoast({ ...c, plan: "" }, score.risk, lang, score.zones[0]?.zone))
-    .map((c) => ({ ...c, roast: fixGender(c.roast, people, lang) }))
-    .filter((c) => c.roast.split(/\s+/).length >= 6 && inLang(c.roast, lang));
-  return { cands, plan: out?.plan ?? "" };
+    .map((c) => ({ title: sentenceCaseTitle(c.title, lang, own), roast: fixGender(c.roast, people, lang) }))
+    .filter((c) => {
+      if (c.roast.split(/\s+/).length < 6 || !inLang(c.roast, lang)) {
+        rejected.push({ ...c, total: -2, dropped: true, reason: "too short, wrong language or filtered" });
+        return false;
+      }
+      const chk = checkJoke(c.title, c.roast, own);
+      if (!chk.ok) rejected.push({ ...c, total: -2, dropped: true, reason: chk.reason });
+      return chk.ok;
+    });
+  return { cands, rejected, plan: out?.plan ?? "" };
 }
 
 /**
@@ -125,35 +167,52 @@ async function candidates(input: RoastInput, toolCalls: string[]) {
  * then fall back to the best-ranked sensible one, or the template.
  */
 export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
-  const { a, b, tastesA, tastesB, score, lang } = input;
+  const { a, b, tastesA, tastesB, entitiesA, entitiesB, score, lang } = input;
   const t0 = Date.now();
   const toolCalls: string[] = [];
-  const pronouns = (p: Person) => `${p.nick} (${p.pronoun === "m" ? "he" : p.pronoun === "f" ? "she" : "they"})`;
-  const context = `${pronouns(a)} likes ${tastesA.join(", ")}; ${pronouns(b)} likes ${tastesB.join(", ")}; places: ${score.pins.slice(0, 12).map((p) => p.name).join(", ")}`;
+  const pron = (p: Person) => (p.pronoun === "m" ? "he" : p.pronoun === "f" ? "she" : "they");
+  const owns = (p: Person, es: TasteEntity[], shown: string[]) => `${p.nick} (${pron(p)}) — ONLY ${p.nick}'s tastes: ${es.map((e, i) => `${shown[i] ?? e.name} [${e.type === "tag" ? "category" : e.type}]`).join("; ")}`;
+  const context = `${owns(a, entitiesA, tastesA)}. ${owns(b, entitiesB, tastesB)}. Real places: ${score.pins.slice(0, 12).map((p) => p.name).join(", ")}. No songs, albums or characters are verified for these tastes: citing any is a fact error.`;
 
   const judged: Judged[] = [];
   let plan = "";
   let best: { title: string; roast: string } | null = null;
-  let anySensible: { title: string; roast: string } | null = null;
   for (let round = 0; round < 2 && !best; round++) {
     if (round === 1 && Date.now() - t0 > REGEN_BUDGET_MS) break;
-    const r = await candidates(input, toolCalls);
+    // Round 2 skips the tool round-trip (same Qloo data inlined) to stay within the time budget.
+    const r = await candidates(input, toolCalls, round === 0);
     plan ||= r.plan;
+    judged.push(...r.rejected);
     if (!r.cands.length) continue;
-    const j = await judge(lang, r.cands.map((c) => c.roast), context, input.signal);
+    // The judge sees the title punchline too, so a wrong reference there is caught as well.
+    const forJudge = r.cands.map((c) => {
+      const tail = c.title.split("·").slice(1).join("·").trim();
+      return tail ? `Title: "${tail}" | Joke: ${c.roast}` : c.roast;
+    });
+    const j = await judge(lang, forJudge, context, input.signal);
+    // Real places and the city never have an owner; don't let the judge fail them.
+    const known = new Set(ownershipCtx(input).vocab.map(fold));
+    for (const v of j?.verdicts ?? [])
+      for (const f of v.facts_cited ?? [])
+        if (known.has(fold(f.fact)) || fold(f.attributed_to) === fold(f.true_owner)) f.correct = true;
+    // If the judge is down, the deterministic checks already passed: accept the first.
     const pick = pickBest(r.cands, j?.verdicts ?? null, j?.ranking ?? null);
-    r.cands.forEach((c, i) => judged.push({ roast: c.roast, total: pick.totals[i], dropped: pick.totals[i] < 0 }));
+    r.cands.forEach((c, i) => {
+      const v = j?.verdicts.find((x) => x.index === i);
+      const wrong = v?.facts_cited?.find((f) => !f.correct);
+      const reason = !v ? undefined : wrong ? `judge: ${wrong.fact} is ${wrong.true_owner}'s, not ${wrong.attributed_to}'s` : passes(v) ? undefined : `judge: ${Object.entries(v).filter(([k, x]) => x === false && k !== "index").map(([k]) => k).join(", ") || `funny ${v.funny}`}`;
+      judged.push({ title: c.title, roast: c.roast, total: pick.totals[i], dropped: pick.totals[i] < 0, reason });
+    });
     best = pick.best;
-    // Best-ranked candidate that at least makes sense and is safe, for when nobody passes.
-    const sensible = (j?.ranking ?? []).map((i) => ({ i, v: j?.verdicts.find((v) => v.index === i) })).find(({ v }) => v?.makes_sense && v.safe && v.no_contradiction);
-    if (sensible && r.cands[sensible.i]) anySensible = r.cands[sensible.i];
   }
-  const chosen = best ?? anySensible;
-  if (!chosen) throw new Error("no acceptable roast");
+  const safe = fallbackRoast(a, b, score, lang, tastesA, tastesB);
+  const own = ownershipCtx(input);
   const cleanPlan = fixGender(cleanLine(plan, score.risk), [a, b], lang);
+  const planOk = cleanPlan && inLang(cleanPlan, lang) && checkJoke("", cleanPlan, own).ok && checkReferences(cleanPlan, own).ok;
   return {
-    roast: { ...chosen, plan: cleanPlan && inLang(cleanPlan, lang) ? cleanPlan : fallbackRoast(a, b, score, lang).plan },
+    roast: { ...(best ?? { title: safe.title, roast: safe.roast }), plan: planOk ? cleanPlan : safe.plan },
     toolCalls,
     judged,
+    usedTemplate: !best,
   };
 }
