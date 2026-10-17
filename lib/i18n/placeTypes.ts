@@ -52,3 +52,9 @@ export function ambience(tag: string, lang: Lang): string | null {
 
 /** Qloo price level (1-4) as $ symbols. */
 export const priceSigns = (p?: number) => (p ? "$".repeat(Math.max(1, Math.min(4, Math.round(p))))  : "");
+
+/** Drops a generic type when a more specific one is listed: "restaurantes" + "restaurantes de mariscos" -> just the latter. */
+export function specificTypes(types: string[]): string[] {
+  const u = [...new Set(types)];
+  return u.filter((x) => !u.some((y) => y !== x && (y.startsWith(`${x} `) || y.endsWith(` ${x}`))));
+}

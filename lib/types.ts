@@ -17,7 +17,7 @@ export interface CityContext extends GeoPoint {
 }
 
 /** Kind of thing a person typed: a specific title/artist, or a general category ("videojuegos"). */
-export type EntityType = "artist" | "movie" | "tv_show" | "book" | "videogame" | "podcast" | "place";
+export type EntityType = "artist" | "movie" | "tv_show" | "book" | "videogame" | "podcast" | "place" | "brand";
 
 /** A free-text taste after normalization (before hitting Qloo). */
 export interface TasteQuery {
@@ -87,6 +87,10 @@ export interface TasteEntity {
   placeMode?: "typed" | "general";
   /** How many Qloo places this taste brought (before blending). */
   placeCount?: number;
+  /** Near-duplicate tastes of the same person folded into this one ("ceviche" + "mariscos"). */
+  merged?: TasteLabel[];
+  /** Index of the other person's taste that is the same kind of thing (shared taste), if any. */
+  pair?: number;
 }
 
 export interface ResolvedTastes {
@@ -149,6 +153,8 @@ export interface Pin extends GeoPoint {
   /** Which of A's / B's tastes (indices into tastesA / tastesB) produced this place, strongest first. */
   fromA?: number[];
   fromB?: number[];
+  /** "both" because the other has the same kind of taste; names whose Qloo list the place came from. */
+  via?: "a" | "b";
   /** Client-side, in the UI language: why this place shows up, and its kind. */
   why?: string;
   typeLabel?: string;
@@ -193,7 +199,7 @@ export interface ZoneStat extends GeoPoint {
 export type RiskLevel = "low" | "medium" | "high" | "cheating";
 
 export interface ScoreResult {
-  /** Cheating risk: average share of each person's liked places the other doesn't like. */
+  /** Cheating risk: average of taste difference (tasteRisk) and separate plans (placeRisk); see lib/scoring/score.ts. */
   risk: number;
   level: RiskLevel;
   /** One-sided place counts and list sizes, to explain the number. */
@@ -204,6 +210,12 @@ export interface ScoreResult {
   shared: number;
   /** Secondary: Qloo taste-tag affinity (0-100). */
   tagScore: number;
+  /** Risk parts (0-100): taste difference and share of plans the other wouldn't share. risk = average. */
+  tasteRisk?: number;
+  placeRisk?: number;
+  /** How many of each person's tastes have a counterpart in the other's. */
+  pairedA?: number;
+  pairedB?: number;
   pins: Pin[];
   zones: ZoneStat[];
   topTags: SharedTag[];

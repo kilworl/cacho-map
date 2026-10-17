@@ -3,6 +3,8 @@ import { matchConfidence } from "../tastes/match";
 import { PLACE_KINDS, isPlaceKind, placeKindTags, type PlaceKind } from "../places/catalog";
 import { normalizeName } from "../text/titleCase";
 import { qlooGet } from "./client";
+import { fitsTaste, tasteTopics } from "../places/fit";
+import { distanceM } from "../geo/cities";
 
 /* Raw response shapes (only the fields we use). */
 interface RawEntity {
@@ -128,7 +130,10 @@ export interface Understood {
  * (strict word match), activities -> place kinds only. A rejected best guess is kept
  * as `got` so the UI can say "Qloo only found 40k".
  */
-export async function resolveParsed(t: ParsedTaste): Promise<TasteEntity | MissingTaste> {
+/** A taste that is a physical place or local team must be near the couple ("Junior" != an Argentine club). */
+const FAR_M = 400_000;
+
+export async function resolveParsed(t: ParsedTaste, at?: GeoPoint): Promise<TasteEntity | MissingTaste> {
   const places = t.places.filter(isPlaceKind);
   const base = { input: t.input, kind: t.kind, label: t.label, places };
   const queries = [t.query, ...(t.alt ?? [])];
@@ -139,6 +144,8 @@ export async function resolveParsed(t: ParsedTaste): Promise<TasteEntity | Missi
         const cands = await entityCandidates(q, t.type);
         for (const c of cands) {
           const e = entityOf(c, t.input);
+          const far = at && c.location?.lat != null && c.location?.lon != null && distanceM(at, { lat: c.location.lat, lon: c.location.lon! }) > FAR_M;
+          if (far) { got ??= e.name; continue; }
           if (matchConfidence(q, e.name, { akas: e.akas }).ok || matchConfidence(t.input, e.name, { akas: e.akas }).ok) return { ...e, ...base, signal: true };
           got ??= e.name;
         }
@@ -159,8 +166,8 @@ export async function resolveParsed(t: ParsedTaste): Promise<TasteEntity | Missi
   return { input: t.input, label: t.label, reason: got ? "low_confidence" : "no_match", ...(got && { got }) };
 }
 
-export async function understand(items: ParsedTaste[]): Promise<Understood> {
-  const res = await Promise.all(items.map(resolveParsed));
+export async function understand(items: ParsedTaste[], at?: GeoPoint): Promise<Understood> {
+  const res = await Promise.all(items.map((t) => resolveParsed(t, at)));
   const found: TasteEntity[] = [];
   const missing: MissingTaste[] = [];
   const seen = new Set<string>();
@@ -243,7 +250,7 @@ export function toPlace(e: RawEntity, wanted?: Set<string>): Place | null {
  * Qloo place recommendations near a point, personalized by taste entities.
  * Widens the radius once if the area is sparse (small towns, rural locations).
  */
-export async function placesNear(signals: Signals, at: GeoPoint, radiusM = 9000): Promise<Place[]> {
+export async function placesNear(signals: Signals, at: GeoPoint, radiusM = 9000, keep: (x: RawEntity) => boolean = () => true): Promise<Place[]> {
   const fetchRadius = async (r: number) =>
     entitiesOf(
       await qlooGet("/v2/insights", {
@@ -253,7 +260,7 @@ export async function placesNear(signals: Signals, at: GeoPoint, radiusM = 9000)
         ...signalParams(signals),
         take: 50,
       }),
-    ).map((x) => toPlace(x)).filter((p): p is Place => !!p);
+    ).filter(keep).map((x) => toPlace(x)).filter((p): p is Place => !!p);
   const near = await fetchRadius(radiusM);
   return near.length >= 12 ? near : fetchRadius(radiusM * 4);
 }
@@ -268,6 +275,10 @@ export async function placesNear(signals: Signals, at: GeoPoint, radiusM = 9000)
 export async function placesForTaste(e: TasteEntity, at: GeoPoint): Promise<{ places: Place[]; mode?: "typed" | "general" }> {
   const kinds = (e.places ?? []).filter(isPlaceKind) as PlaceKind[];
   const signals: Signals = !e.signal ? { entities: [], tags: [] } : e.type === "tag" ? { entities: [], tags: [e.id] } : { entities: [e.id], tags: [] };
+  // Drop places that don't fit this taste (a supermarket "café", a baseball stadium for UFC, a salsa bar for Metallica).
+  const topics = tasteTopics([e.input, e.label?.es, e.label?.en, e.name, e.facts].filter(Boolean).join(" "));
+  const fits = (kindsAsked: readonly PlaceKind[]) => (x: RawEntity) =>
+    fitsTaste({ name: x.name, genres: (x.tags ?? []).map((t) => t.name ?? "").filter(Boolean), tagIds: (x.tags ?? []).map((t) => t.id ?? t.tag_id ?? "") }, kindsAsked, topics);
   if (kinds.length) {
     const tags = placeKindTags(kinds);
     const wanted = new Set(tags);
@@ -279,13 +290,13 @@ export async function placesForTaste(e: TasteEntity, at: GeoPoint): Promise<{ pl
         "filter.tags": tags.join(","),
         ...signalParams(signals),
         take: 30,
-      })).map((x) => toPlace(x, wanted)).filter((p): p is Place => !!p);
+      })).filter(fits(kinds)).map((x) => toPlace(x, wanted)).filter((p): p is Place => !!p);
     let typed = await fetchR(12_000);
     if (typed.length < 4) typed = await fetchR(40_000);
     if (typed.length) return { places: typed, mode: "typed" };
   }
   if (!e.signal) return { places: [] };
-  return { places: await placesNear(signals, at), mode: "general" };
+  return { places: await placesNear(signals, at, 9000, fits([])), mode: "general" };
 }
 
 export { PLACE_KINDS };

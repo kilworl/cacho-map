@@ -8,7 +8,7 @@ import type { MatchResult, ZoneStat } from "@/lib/types";
 import { shareQuery } from "@/lib/share";
 import { useI18n } from "@/lib/i18n/LangProvider";
 import { WHO_COLOR } from "./map/mapTheme";
-import { breakdown, list, pctChain, tasteName } from "@/lib/explain";
+import { breakdown, calc, list, pctChain, tasteName } from "@/lib/explain";
 import { isPlaceKind, placeKindLabel } from "@/lib/places/catalog";
 
 interface Props {
@@ -44,7 +44,7 @@ export function ResultView({ r, onZone, onReset }: Props) {
         <p className="pct-explain">{pctChain(r, lang)}</p>
         <details className="how-calc">
           <summary>{t.howCalcTitle}</summary>
-          <ul>{t.howCalc(r.a, r.b, r.totalA, r.onlyA, r.totalB, r.onlyB, r.risk).map((line) => <li key={line}>{line}</li>)}</ul>
+          <ul>{t.howCalc(calc(r, lang)).map((line) => <li key={line}>{line}</li>)}</ul>
           {breakdown(r, lang).map((b) => (
             <div key={b.title} className="breakdown">
               <p>{b.title}</p>
@@ -121,16 +121,17 @@ function Understood({ r }: { r: MatchResult }) {
         <div key={p.side} className={`understood-row understood--${p.side}`}>
           <span className="understood-who">{p.who}</span>
           <div className="chips">
-            {p.found.map((e) => {
+            {p.found.map((e, i) => {
               const label = tasteName(e, lang);
               const kinds = e.placeMode === "typed" ? (e.places ?? []).filter(isPlaceKind).map((k) => placeKindLabel(k, lang)) : [];
               const qloo = e.type !== "place_kind" && e.name.toLowerCase() !== label.toLowerCase() ? e.name : "";
               return (
-                <span key={e.id} className="chip chip--ok" title={e.input}>
+                <span key={i} className="chip chip--ok" title={e.input}>
                   {label}
                   <small>{t.entityTypes[e.type] ?? e.type.replace("_", " ")}</small>
                   {qloo && <em>= {qloo}</em>}
                   {kinds.length > 0 && <em>→ {list(kinds.slice(0, 2), lang)}</em>}
+                  {e.pair != null && <em className="chip-pair">↔ {t.sharedTaste}</em>}
                 </span>
               );
             })}

@@ -1,7 +1,8 @@
 import type { Lang, MatchResult, Pin, TasteEntity, ZoneStat } from "./types";
-import { dictionaries } from "./i18n/dict";
+import { dictionaries, type Calc } from "./i18n/dict";
+import { DEEP_PLACES } from "./scoring/score";
 import { isPlaceKind, placeKindLabel } from "./places/catalog";
-import { placeType } from "./i18n/placeTypes";
+import { placeType, specificTypes } from "./i18n/placeTypes";
 
 /**
  * Plain-language "why" for every place, zone and the % itself, built from the
@@ -31,6 +32,9 @@ export function placeWhy(p: Pin, r: MatchResult, lang: Lang): string {
   const tb = names(p.fromB, r.tastesB, lang, true);
   const general = (idx: number[] | undefined, tastes: TasteEntity[], s: string) =>
     idx?.length && tastes[idx[0]]?.placeMode === "general" ? t.fansOf(s) : s;
+  // Shared via a same-kind taste: the place is on one person's list, the other has the twin taste.
+  if (p.who === "both" && p.via && ta && tb)
+    return p.via === "a" ? t.placeWhyPair(r.a, general(p.fromA, r.tastesA, ta), r.b, tb) : t.placeWhyPair(r.b, general(p.fromB, r.tastesB, tb), r.a, ta);
   if (p.who === "both" && ta && tb) return t.placeWhyBoth(r.a, general(p.fromA, r.tastesA, ta), r.b, general(p.fromB, r.tastesB, tb));
   if (p.who === "a" && ta) return t.placeWhyOne(r.a, general(p.fromA, r.tastesA, ta));
   if (p.who === "b" && tb) return t.placeWhyOne(r.b, general(p.fromB, r.tastesB, tb));
@@ -39,7 +43,7 @@ export function placeWhy(p: Pin, r: MatchResult, lang: Lang): string {
 
 /** Localized place kinds of a zone ("bares y cafés"), from its Qloo place genres. */
 export function zoneTypes(z: ZoneStat, lang: Lang): string {
-  const types = [...new Set(z.profile.genres.map((g) => placeType(g, lang)).filter((x) => x && (x.known || lang === "en")).map((x) => x!.plural))].slice(0, 2);
+  const types = specificTypes(z.profile.genres.map((g) => placeType(g, lang)).filter((x) => x && (x.known || lang === "en")).map((x) => x!.plural)).slice(0, 2);
   return list(types, lang);
 }
 
@@ -68,11 +72,29 @@ export function zoneWhy(z: ZoneStat, r: MatchResult, lang: Lang): string {
   return t.zoneWhySplit(z.zone, types, r.a, ta || "—", r.b, tb || "—");
 }
 
-/** The % in plain words, naming the tastes behind each side's solo plans. */
-export function pctChain(r: MatchResult, lang: Lang): string {
-  const t = dictionaries[lang];
+/** Numbers + names behind the % (shared by the % sentence and the "how is it calculated" panel). */
+export function calc(r: MatchResult, lang: Lang): Calc {
   const solo = (who: "a" | "b") => topTastes(r.pins.filter((p) => p.who === who), who === "a" ? "fromA" : "fromB", who === "a" ? r.tastesA : r.tastesB, lang, 2, true);
-  return t.pctChain(r.risk, r.a, r.totalA, r.onlyA, r.onlyA ? solo("a") : "", r.b, r.totalB, r.onlyB, r.onlyB ? solo("b") : "");
+  const pairs = r.tastesA.flatMap((e) => {
+    const o = e.pair != null ? r.tastesB[e.pair] : undefined;
+    if (!o) return [];
+    const x = tasteName(e, lang);
+    const y = tasteName(o, lang);
+    return [x.toLowerCase() === y.toLowerCase() ? x : `${x} ↔ ${y}`];
+  });
+  return {
+    a: r.a, b: r.b, risk: r.risk, totalA: r.totalA, onlyA: r.onlyA, totalB: r.totalB, onlyB: r.onlyB,
+    whyA: r.onlyA ? solo("a") : "", whyB: r.onlyB ? solo("b") : "",
+    sharedTastes: pairs.slice(0, 3).join(", "),
+    tasteRisk: r.tasteRisk, placeRisk: r.placeRisk,
+    nA: r.tastesA.length, nB: r.tastesB.length, pairedA: r.pairedA ?? 0, pairedB: r.pairedB ?? 0,
+    tags: r.topTags.length > 0, deep: DEEP_PLACES,
+  };
+}
+
+/** The % in plain words: taste part + plan part, naming the tastes behind each side's solo plans. */
+export function pctChain(r: MatchResult, lang: Lang): string {
+  return dictionaries[lang].pctChain(calc(r, lang));
 }
 
 /** Per-taste breakdown for the "how is it calculated" panel. */

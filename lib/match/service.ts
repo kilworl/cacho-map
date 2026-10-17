@@ -2,7 +2,8 @@ import type { CityContext, Lang, MatchResult } from "../types";
 import { compareTastes, placesForTaste, probeLists, toSignals, understand } from "../qloo/api";
 import { parseTastes } from "../tastes/parse";
 import { assignZones } from "../geo/zones";
-import { score, TOP_PLACES } from "../scoring/score";
+import { DEEP_PLACES, score, TOP_PLACES } from "../scoring/score";
+import { mergeDuplicates, pairTastes } from "../tastes/dedupe";
 import { favoritePlaces, type InputKind } from "../scoring/blend";
 import type { MissingTaste, Place, Pronoun, TasteEntity } from "../types";
 
@@ -42,9 +43,14 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   const probesP = probeLists(city).catch(() => []);
   const parsed = await parseTastes(a.tastes, b.tastes);
   timings.parse = Date.now() - t0;
-  const [ua, ub] = await Promise.all([understand(parsed.a), understand(parsed.b)]);
+  const [ua, ub] = await Promise.all([understand(parsed.a, city), understand(parsed.b, city)]);
   timings.search = Date.now() - t0 - timings.parse;
   if (!ua.found.length || !ub.found.length) throw new NoTastesError([...ua.missing, ...ub.missing]);
+  // Fold each person's near-duplicates ("ceviche" + "mariscos"), then link same-kind tastes across
+  // the couple ("salsa" <-> "bailar salsa" get the same Qloo signal and place kinds).
+  const paired = pairTastes(mergeDuplicates(ua.found), mergeDuplicates(ub.found));
+  ua.found = paired.a;
+  ub.found = paired.b;
 
   const t1 = Date.now();
   // One Qloo place list per taste (places of the kinds it leads to, ranked for it), blended with capped weights.
@@ -57,23 +63,35 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   // Lifestyle tastes with no such places nearby are dropped honestly ("no gyms near you"); the rest keep their signal.
   const keep = (u: typeof ua, l: typeof la) => {
     const noPlaces = l.filter((x) => !x.places.length && !x.e.signal);
-    const found = u.found.filter((e) => !noPlaces.some((x) => x.e === e)).map((e) => {
+    const kept = u.found.filter((e) => !noPlaces.some((x) => x.e === e));
+    const found = kept.map((e) => {
       const x = l.find((y) => y.e === e);
       return x ? { ...e, placeMode: x.mode, placeCount: x.places.length } : e;
     });
     const missing = [...u.missing, ...noPlaces.map((x): MissingTaste => ({ input: x.e.input, label: x.e.label, reason: "no_places" }))];
     // Per-taste lists, indexed like `found`, for the blend (attribution maps list index -> taste index).
-    const withPlaces = l.filter((x) => x.places.length).map((x) => ({ idx: found.findIndex((f) => f.id === x.e.id), kind: inputKind(x.e, x.mode), places: x.places }));
-    return { found, missing, withPlaces };
+    const withPlaces = l.filter((x) => x.places.length).map((x) => ({ idx: kept.indexOf(x.e), kind: inputKind(x.e, x.mode), places: x.places }));
+    return { found, missing, withPlaces, kept };
   };
   const ka = keep(ua, la);
   const kb = keep(ub, lb);
+  // Dropped tastes shift indexes: re-point each `pair` to the partner's kept list.
+  const repair = (k: typeof ka, other: typeof ka, otherAll: TasteEntity[]) => {
+    k.found = k.found.map((e) => {
+      const j = e.pair == null ? -1 : other.kept.indexOf(otherAll[e.pair]);
+      const rest = { ...e };
+      delete rest.pair;
+      return j < 0 ? rest : { ...rest, pair: j };
+    });
+  };
+  repair(ka, kb, ub.found);
+  repair(kb, ka, ua.found);
   if (!ka.withPlaces.length || !kb.withPlaces.length) throw new NoTastesError([...ka.missing, ...kb.missing]);
   const ia = toSignals(ka.found.filter((e) => e.signal));
   const ib = toSignals(kb.found.filter((e) => e.signal));
   const hasSignal = (x: typeof ia) => x.entities.length + x.tags.length > 0;
   const tags = hasSignal(ia) && hasSignal(ib) ? await compareTastes(ia, ib).catch(() => []) : [];
-  const fav = favoritePlaces(ka.withPlaces, kb.withPlaces, TOP_PLACES, probes);
+  const fav = favoritePlaces(ka.withPlaces, kb.withPlaces, TOP_PLACES, probes, DEEP_PLACES);
   const remap = (ps: typeof fav.a, w: typeof ka.withPlaces) => ps.map((p) => ({ ...p, from: p.from.map((i) => w[i].idx) }));
   const pa = remap(fav.a, ka.withPlaces);
   const pb = remap(fav.b, kb.withPlaces);
@@ -81,7 +99,9 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
   const rb = { found: kb.found, missing: kb.missing };
   timings.insights = Date.now() - t1;
 
-  const scored = score(tags, assignZones(pa, city, lang), assignZones(pb, city, lang));
+  const scored = score(tags, assignZones(pa.slice(0, TOP_PLACES), city, lang), assignZones(pb.slice(0, TOP_PLACES), city, lang), {
+    deepA: pa, deepB: pb, tastesA: ka.found, tastesB: kb.found,
+  });
   const t2 = Date.now();
   const s = scored;
   let roast;

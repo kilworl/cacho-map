@@ -23,21 +23,22 @@ const Item = z.object({
 const Schema = z.object({ a: z.array(Item), b: z.array(Item) });
 
 const SYSTEM = `You split what each person of a couple says they like into ATOMIC tastes for the Qloo taste API.
-The text is free and natural ("Me gusta Lana del Rey, el mentalista, películas de acción y las motos, el gym y ver anime"). Split on commas AND on "y/and/e", and inside phrases with two things ("películas de acción y las motos" = 2 tastes). Drop filler ("me gusta", "ver", "el/la", "a X le gusta"). Never drop a taste, never invent one.
+The text is free and natural ("Me gusta Lana del Rey, el mentalista, películas de acción y las motos, el gym y ver anime"). Split on commas AND on "y/and/e", and inside phrases with two things ("películas de acción y las motos" = 2 tastes). Drop filler ("me gusta", "ver", "el/la", "a X le gusta"). Identity words are the taste itself: "soy metalero" = genre metal, "soy vegane/vegano" = food "comida vegana"/"vegan food", "rumbero" = partying. Labels never add a gender the person didn't use. Never drop a taste, never invent one.
 For each taste:
-- kind "title": a specific artist, band, movie, TV show, book, game, podcast. query = official English/international name ("el mentalista" -> "The Mentalist", type tv_show; "Rápido y furioso" -> "Fast & Furious", type movie; "BTS" -> "BTS", type artist). Fix typos.
+- kind "title": a specific artist, band, movie, TV show, book, game, podcast. query = official English/international name ("el mentalista" -> "The Mentalist", type tv_show; "Rápido y furioso" -> "Fast & Furious", type movie; "BTS" -> "BTS", type artist). A sports team is type brand with its full local name ("el Junior" -> "Junior de Barranquilla", alt ["Atlético Junior"]; "el Nacional" -> "Atlético Nacional"). Fix typos.
 - kind "genre": a music/film/TV genre or theme ("vallenato" -> "Vallenato", domain music; "películas de acción" -> "Action", domain media; "kdramas"/"doramas" -> "K-drama", domain media; "anime" -> "Anime", domain media).
 - kind "food": a food, dish or cuisine ("sushi" -> "Sushi", "comida mexicana" -> "Mexican", "fresas con crema" -> "Strawberries and cream", alt ["Desserts"]), domain food.
-- kind "activity": a lifestyle thing done at places ("el gym" -> "Gym", "la playa" -> "Beach", "las motos" -> "Motorcycles", "bailar" -> "Dancing", "leer" -> "Books").
+- kind "activity": a lifestyle thing done at places ("el gym" -> "Gym", "la playa" -> "Beach", "las motos" -> "Motorcycles", "bailar" -> "Dancing", "leer" -> "Books"). An activity built around a music genre IS that genre: "bailar salsa" = kind genre, query "Salsa", domain music, same places as "salsa".
+Merge near-duplicates of ONE person into one taste: "ceviche, mariscos y comida de mar" = one food taste (input "ceviche, mariscos, comida de mar", query "Seafood"); "salsa" + "bailar salsa" = one.
 es/en/es_art: short display label in each language ("películas de acción"/"action movies", "k-dramas"/"K-dramas", "las motos" -> "motos"/"motorcycles", "fresas con crema"/"strawberries and cream"). Titles keep their name ("El mentalista"/"The Mentalist").
-places: 0-3 place kinds a fan would OBVIOUSLY go to BECAUSE of this taste, from the allowed list only. Examples: action movies -> cinema, karting; anime -> cinema, video_games, comics; k-dramas -> korean, cinema; gym -> gym; beach -> beach; motorcycles -> motorcycle, karting; vallenato -> night_club, bar; reggaeton/BTS/pop artist -> night_club, live_music; rock/indie artist -> live_music, bar; sushi -> sushi; mexican -> mexican; strawberries and cream -> ice_cream, dessert; coffee -> cafe; books -> bookstore, cafe; detective/mystery shows -> escape_room, bookstore. Leave empty if nothing is obvious.`;
+places: 0-3 place kinds a fan would OBVIOUSLY go to BECAUSE of this taste, from the allowed list only. Examples: action movies -> cinema, karting; anime -> cinema, video_games, comics; k-dramas -> korean, cinema; gym -> gym; beach -> beach; motorcycles -> motorcycle, karting; vallenato -> night_club, bar; reggaeton/BTS/pop artist -> night_club, live_music; rock/indie artist -> live_music, bar; salsa -> salsa_bar, night_club, live_music; champeta -> night_club, bar; UFC/boxing -> sports_bar; football/a team -> sports_bar, stadium; seafood/ceviche -> seafood; sushi -> sushi; mexican -> mexican; strawberries and cream -> ice_cream, dessert; coffee -> cafe; books -> bookstore, cafe; walking (downtown, old town, the walled city) -> park, attraction; museums -> museum; detective/mystery shows -> escape_room, bookstore. Leave empty if nothing is obvious.`;
 
 /** Generic labels read lowercase mid-sentence ("action movies", "gym"); names and "K-dramas" keep their capitals. */
 const lower = (s: string) => s.trim();
 const caseLabel = (s: string, kind: string) => (kind !== "title" && /^\p{Lu}\p{Ll}/u.test(s.trim()) ? s.trim().charAt(0).toLowerCase() + s.trim().slice(1) : s.trim());
 
 /** One LLM call splits both people's free text into atomic tastes. Falls back to a heuristic split. */
-export async function parseTastes(textA: string, textB: string, timeoutMs = 9000): Promise<{ a: ParsedTaste[]; b: ParsedTaste[]; llm: boolean }> {
+export async function parseTastes(textA: string, textB: string, timeoutMs = 14000): Promise<{ a: ParsedTaste[]; b: ParsedTaste[]; llm: boolean }> {
   try {
     const res = await generateText({
       model: modelId(),
@@ -93,11 +94,21 @@ const KNOWN: Record<string, [string, string, TasteKind, string, PlaceKind[], Par
   "fresas con crema": ["fresas con crema", "strawberries and cream", "food", "Desserts", ["ice_cream", "dessert"], "food"],
   cafe: ["café", "coffee", "food", "Coffee", ["cafe"], "food"], sushi: ["sushi", "sushi", "food", "Sushi", ["sushi"], "food"],
   "comida mexicana": ["comida mexicana", "Mexican food", "food", "Mexican", ["mexican"], "food"],
-  vallenato: ["vallenato", "vallenato", "genre", "Vallenato", ["night_club", "bar"], "music"], salsa: ["salsa", "salsa", "genre", "Salsa", ["salsa_bar", "night_club"], "music"],
+  vallenato: ["vallenato", "vallenato", "genre", "Vallenato", ["night_club", "bar"], "music"], salsa: ["salsa", "salsa", "genre", "Salsa", ["salsa_bar", "night_club", "live_music"], "music"],
   videojuegos: ["videojuegos", "video games", "genre", "Video games", ["video_games"], "media"], libros: ["libros", "books", "activity", "Books", ["bookstore"]],
+  "bailar salsa": ["salsa", "salsa", "genre", "Salsa", ["salsa_bar", "night_club", "live_music"], "music"],
+  ceviche: ["ceviche", "ceviche", "food", "Seafood", ["seafood"], "food"], mariscos: ["mariscos", "shellfish", "food", "Seafood", ["seafood"], "food"],
+  "comida de mar": ["comida de mar", "seafood", "food", "Seafood", ["seafood"], "food"], "true crime": ["true crime", "true crime", "genre", "True crime", ["cinema", "bookstore", "escape_room"], "media"],
+  caminar: ["caminar", "walking", "activity", "Walking", ["park", "attraction"]], museos: ["museos", "museums", "activity", "Museums", ["museum"]],
+  champeta: ["champeta", "champeta", "genre", "Champeta", ["night_club", "bar"], "music"], reggaeton: ["reguetón", "reggaeton", "genre", "Reggaeton", ["night_club", "live_music"], "music"], regueton: ["reguetón", "reggaeton", "genre", "Reggaeton", ["night_club", "live_music"], "music"],
+  jazz: ["jazz", "jazz", "genre", "Jazz", ["live_music", "bar"], "music"], cerveza: ["cerveza", "beer", "food", "Beer", ["bar"], "food"],
+  discotecas: ["discotecas", "nightclubs", "activity", "Nightclubs", ["night_club"]], brunch: ["brunch", "brunch", "food", "Brunch", ["brunch"], "food"],
 };
+/** Longest known key inside a longer phrase ("documentales de true crime en Netflix" -> true crime). */
+const KNOWN_KEYS = Object.keys(KNOWN).sort((x, y) => y.length - x.length);
+const knownIn = (s: string) => KNOWN[s] ?? KNOWN[KNOWN_KEYS.find((k) => new RegExp(`(^|\\s)${k}(\\s|$)`).test(s)) ?? ""];
 
-const ART: Record<string, string> = { gym: "el", playa: "la", motos: "las", bailar: "", rumba: "la", anime: "el", "k-dramas": "los", "películas de acción": "las", acción: "la", "fresas con crema": "las", café: "el", sushi: "el", "comida mexicana": "la", vallenato: "el", salsa: "la", videojuegos: "los", libros: "los" };
+const ART: Record<string, string> = { gym: "el", playa: "la", motos: "las", bailar: "", rumba: "la", anime: "el", "k-dramas": "los", "películas de acción": "las", acción: "la", "fresas con crema": "las", café: "el", sushi: "el", "comida mexicana": "la", vallenato: "el", salsa: "la", videojuegos: "los", libros: "los", ceviche: "el", mariscos: "los", "comida de mar": "la", "true crime": "el", caminar: "", museos: "los", champeta: "la", reguetón: "el", jazz: "el", cerveza: "la", discotecas: "las", brunch: "el" };
 
 /** Deterministic split when the LLM is down: commas / "y" / "and", filler words removed. */
 export function heuristicParse(text: string): ParsedTaste[] {
@@ -108,7 +119,7 @@ export function heuristicParse(text: string): ParsedTaste[] {
     .map((x) => x.replace(/^\s*(ver|escuchar|ir a|comer|jugar|watch(ing)?|listen(ing)? to|eat(ing)?|play(ing)?|go(ing)? to)\s+/i, "").replace(/^\s*(el|la|los|las|un|una|the)\s+/i, "").trim())
     .filter((x) => x.length > 1);
   return dedupe(parts.map((input): ParsedTaste => {
-    const k = KNOWN[strip(input)];
+    const k = knownIn(strip(input));
     if (k) return { input, label: { es: k[0], en: k[1], esArt: ART[k[0]] ? `${ART[k[0]]} ${k[0]}` : k[0] }, kind: k[2], query: k[3], places: k[4], ...(k[5] && { domain: k[5] }) };
     const cat = CATEGORY_SYNONYMS[strip(input)];
     if (cat) return { input, label: { es: input, en: cat }, kind: "genre", query: cat, places: [] };

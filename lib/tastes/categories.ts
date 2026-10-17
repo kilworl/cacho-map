@@ -26,4 +26,4 @@ export function heuristicNormalize(input: string): TasteQuery {
   return cat ? { input, kind: "category", query: cat } : { input, kind: "title", query: input };
 }
 
-export const ENTITY_TYPES: EntityType[] = ["artist", "movie", "tv_show", "book", "videogame", "podcast", "place"];
+export const ENTITY_TYPES: EntityType[] = ["artist", "movie", "tv_show", "book", "videogame", "podcast", "place", "brand"];

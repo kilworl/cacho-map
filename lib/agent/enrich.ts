@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { Lang, Pin, ScoreResult, ZoneStat } from "../types";
 import { normalizeModelId } from "./model";
 import { fixGender, pronounHint, type Person } from "./gender";
-import { ambience, placeType, priceSigns } from "../i18n/placeTypes";
-import { inLang } from "./sanitize";
+import { ambience, placeType, priceSigns, specificTypes } from "../i18n/placeTypes";
+import { dedupeWords, inLang, tameAdjectives } from "./sanitize";
 
 /** How many zones / places get an LLM-phrased description. */
 export const ZONES_TO_DESCRIBE = 5;
@@ -29,7 +29,7 @@ const list = (xs: string[], lang: Lang) => (xs.length < 2 ? xs.join("") : `${xs.
 
 /** Deterministic zone copy built only from the Qloo profile. */
 export function templateZone(z: ZoneStat, { a, b, lang }: Ctx): { description: string; why: string } {
-  const types = [...new Set(z.profile.genres.map((g) => placeType(g, lang)).filter((t) => t && (t.known || lang === "en")).map((t) => t!.plural))].slice(0, 2);
+  const types = specificTypes(z.profile.genres.map((g) => placeType(g, lang)).filter((t) => t && (t.known || lang === "en")).map((t) => t!.plural)).slice(0, 2);
   const vibe = [...new Set(z.profile.ambience.map((x) => ambience(x.replace(/ vibe$/i, ""), lang)).filter((x): x is string => !!x))].slice(0, 2);
   const price = priceSigns(z.profile.avgPrice);
   const es = lang === "es";
@@ -93,7 +93,7 @@ export function pickZones(r: ScoreResult): ZoneStat[] {
 
 const system = (ctx: Ctx) => `You write short, factual copy for a couples' map app, in ${ctx.lang === "es" ? "neutral Colombian Spanish" : "English"}.
 Person A is ${pronounHint(ctx.pa, ctx.lang)}, likes ${ctx.tastesA.join(", ")}. Person B is ${pronounHint(ctx.pb, ctx.lang)}, likes ${ctx.tastesB.join(", ")}.
-STRICT RULE: use ONLY the facts in the JSON. Never invent places, foods, prices, history or vibes that are not listed. If a field is empty or null, don't mention it at all (never say something is "not specified"). Attribute a cuisine or type to a place only if that place's own fields list it.
+STRICT RULE: use ONLY the facts in the JSON. Never invent places, foods, prices, history or vibes that are not listed (no "romantic", "quiet", "magical", "perfect" unless the ambience field says so). If a field is empty or null, don't mention it at all (never say something is "not specified"). Attribute a cuisine or type to a place only if that place's own fields list it.
 For each zone:
 - "description" (max 20 words): what the area is like (what kind of places, food, vibe, price), from place_types, cuisines, ambience, price. Don't mention the couple or the zone kind here.
 For each place: "summary" (max 14 words): what it is, from types/cuisines/qloo_description (translated), without repeating the place name. "plan" (max 12 words): a concrete thing to do there, matching its type.
@@ -130,6 +130,7 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 12_000): Pr
   const clean = (s?: string, name?: string) => {
     // Drop "prices not specified"-style filler the model adds despite the prompt.
     let t = s?.replace(/[!¡]/g, "").split(/(?<=[.])\s+/).filter((x) => !/\b(no|not|sin)\b[^.]*\b(specified|especificad\w*|disponibles?|available|indicad\w*)\b|unspecified/i.test(x)).join(" ").trim();
+    if (t) t = tameAdjectives(dedupeWords(t), ctx.lang);
     if (t && !inLang(t, ctx.lang)) return undefined;
     if (t && name && t.toLowerCase().startsWith(name.toLowerCase())) t = t.slice(name.length).replace(/^[\s:,.–-]+/, "");
     return t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : undefined;

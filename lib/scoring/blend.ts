@@ -87,6 +87,8 @@ export function favoritePlaces<T extends { id: string }>(
   top = 20,
   /** Lists for unrelated "probe" tastes in the same city; what they share is popular for anyone. */
   probes?: T[][],
+  /** How many ranked places to return per person (>= top); the extra ones are for overlap checks. */
+  depth = top,
 ): { a: (T & { from: number[] })[]; b: (T & { from: number[] })[]; generic: string[] } {
   const sa = blendScores(a);
   const sb = blendScores(b);
@@ -98,6 +100,6 @@ export function favoritePlaces<T extends { id: string }>(
     if (left(sa) < top || left(sb) < top) break;
     removed.add(id);
   }
-  const pick = (s: typeof sa) => s.filter((x) => !removed.has(x.place.id)).slice(0, top).map((x) => ({ ...x.place, from: x.from }));
+  const pick = (s: typeof sa) => s.filter((x) => !removed.has(x.place.id)).slice(0, depth).map((x) => ({ ...x.place, from: x.from }));
   return { a: pick(sa), b: pick(sb), generic: [...removed] };
 }

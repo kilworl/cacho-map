@@ -74,11 +74,20 @@ The compare call and both place calls run in parallel. Qloo calls retry on 429/5
 ## Scoring
 
 ```
+Tastes are first deduplicated per person (ceviche + mariscos + comida de mar -> one seafood taste;
+"salsa" + "bailar salsa" -> one) and paired across the couple (lib/tastes/dedupe.ts): two tastes pair
+if they're the same Qloo entity/tag or label, foods with the same place kinds, signal-less activities
+with mostly the same place kinds, or a title whose Qloo facts name the other's genre (Making a
+Murderer ~ true crime). A signal-less twin ("bailar salsa") takes its partner's Qloo signal.
+
+taste part = 1 − ( 0.85 × mean(paired tastes A / tastes A, paired B / tastes B) + 0.15 × tag affinity )
+             (without Qloo signals on both sides: affinity left out)
 A = top 20 blended Qloo places for person 1, B = same for person 2 (popular-for-anyone places removed)
-risk  = round( ( |A \ B| / |A|  +  |B \ A| / |B| ) / 2 × 100 )
-        "X% of the plans one likes, the other doesn't"
+a place of A is shared if it's in B's top 30 OR it comes from a taste of A paired with one of B
+plan part  = mean( unshared A / |A| , unshared B / |B| )
+risk       = round( (taste part + plan part) / 2 × 100 )
 level = bajo < 35 ≤ medio < 60 ≤ alto < 80 ≤ "ya hay cacho"
-zone risk = places in the zone only one of them likes / places in the zone
+zone risk = places in the zone only one of them would go to (not shared, as above) / places in the zone
 zone kind = danger if zone risk ≥ 50%, else safe (both would go)
 tag affinity (secondary) = rescale(mean Qloo tag score, 0.50 → 0, 0.73 → 100) × min(1, tags / 40)
 ```

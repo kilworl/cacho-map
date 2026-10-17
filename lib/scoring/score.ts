@@ -1,4 +1,4 @@
-import type { Pin, RiskLevel, ScoreResult, SharedTag, ZonedPlace, ZoneExample, ZoneStat } from "../types";
+import type { Pin, RiskLevel, ScoreResult, SharedTag, TasteEntity, ZonedPlace, ZoneExample, ZoneStat } from "../types";
 import { zoneProfile } from "../geo/zoneProfile";
 
 /**
@@ -6,6 +6,10 @@ import { zoneProfile } from "../geo/zoneProfile";
  * a popular core, so a shorter list (each person's top 20) reflects taste better.
  */
 export const TOP_PLACES = 20;
+/** How deep in the other person's ranked list a place still counts as "theirs too". */
+export const DEEP_PLACES = 30;
+/** Weight of Qloo's tag affinity inside the taste part (the rest is shared tastes). */
+const AFFINITY_WEIGHT = 0.15;
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 
@@ -97,23 +101,82 @@ export function zoneStats(pins: Pin[]): ZoneStat[] {
     .sort((x, y) => y.n - y.both - (x.n - x.both) || y.riskPct - x.riskPct || y.n - x.n);
 }
 
-/** Full score from each person's Qloo place picks (and taste tags as a secondary stat). */
-export function score(tags: SharedTag[], placesA: ZonedPlace[], placesB: ZonedPlace[]): ScoreResult {
+export interface ScoreOptions {
+  /** Each person's deeper ranked list (id + tastes that brought it). */
+  deepA?: { id: string; from?: number[] }[];
+  deepB?: { id: string; from?: number[] }[];
+  /** Resolved tastes, with `pair` = index of the other's same-kind taste. */
+  tastesA?: TasteEntity[];
+  tastesB?: TasteEntity[];
+}
+
+/**
+ * Full score. Risk = average of two parts:
+ *  - tastes: share of each person's tastes with no same-kind counterpart in the other's
+ *    (blended with Qloo's tag affinity when available);
+ *  - plans: share of each person's top places the other wouldn't share — not in the
+ *    other's deeper Qloo list and not brought by a taste they share.
+ * Without taste info (tests/legacy) only the plans part is used.
+ */
+export function score(tags: SharedTag[], placesA: ZonedPlace[], placesB: ZonedPlace[], opt: ScoreOptions = {}): ScoreResult {
   const ta = placesA.slice(0, TOP_PLACES);
   const tb = placesB.slice(0, TOP_PLACES);
-  const r = cheatingRisk(ta.map((p) => p.id), tb.map((p) => p.id));
-  const pins = buildPins(ta, tb);
+  const deep = (d: ScoreOptions["deepA"], top: ZonedPlace[]) => new Map((d ?? top).slice(0, DEEP_PLACES).map((p) => [p.id, p.from]));
+  const deepA = deep(opt.deepA, ta);
+  const deepB = deep(opt.deepB, tb);
+  const tastePair = (from: number[] | undefined, mine?: TasteEntity[]) => from?.map((i) => mine?.[i]?.pair).find((j) => j != null);
+  const pins = new Map<string, Pin>();
+  const toPin = (p: ZonedPlace, who: Pin["who"], fromA?: number[], fromB?: number[], via?: "a" | "b"): Pin => ({
+    id: p.id, name: p.name, lat: p.lat, lon: p.lon, who, zone: p.zone, genre: p.genre, rating: p.rating, image: p.image,
+    priceLevel: p.priceLevel, description: p.description, tags: p.tags,
+    ...(fromA?.length && { fromA }), ...(fromB?.length && { fromB }), ...(via && { via }),
+  });
+  let sharedA = 0;
+  let sharedB = 0;
+  for (const p of ta) {
+    if (deepB.has(p.id)) { sharedA++; pins.set(p.id, toPin(p, "both", p.from, deepB.get(p.id))); continue; }
+    const j = tastePair(p.from, opt.tastesA);
+    if (j != null) { sharedA++; pins.set(p.id, toPin(p, "both", p.from, [j], "a")); continue; }
+    pins.set(p.id, toPin(p, "a", p.from));
+  }
+  for (const p of tb) {
+    const had = pins.get(p.id);
+    const inA = deepA.has(p.id);
+    const j = tastePair(p.from, opt.tastesB);
+    if (inA || j != null) sharedB++;
+    // In both top lists: A's pass already pinned it as "both" (B's top is part of B's deep list).
+    if (had) continue;
+    if (inA) pins.set(p.id, toPin(p, "both", deepA.get(p.id), p.from));
+    else if (j != null) pins.set(p.id, toPin(p, "both", [j], p.from, "b"));
+    else pins.set(p.id, toPin(p, "b", undefined, p.from));
+  }
+  const placeRisk = !ta.length || !tb.length ? 100 : ((1 - sharedA / ta.length + (1 - sharedB / tb.length)) / 2) * 100;
+  const tagScore = Math.round(tagSimilarity(tags));
+  let tasteRisk: number | undefined;
+  let pairedA: number | undefined;
+  let pairedB: number | undefined;
+  if (opt.tastesA?.length && opt.tastesB?.length) {
+    pairedA = opt.tastesA.filter((e) => e.pair != null).length;
+    pairedB = opt.tastesB.filter((e) => e.pair != null).length;
+    const share = (pairedA / opt.tastesA.length + pairedB / opt.tastesB.length) / 2;
+    const sim = tags.length ? (1 - AFFINITY_WEIGHT) * share + AFFINITY_WEIGHT * (tagScore / 100) : share;
+    tasteRisk = Math.round((1 - sim) * 100);
+  }
+  const pr = Math.round(placeRisk);
+  const risk = tasteRisk == null ? pr : Math.round((tasteRisk + pr) / 2);
+  const all = [...pins.values()];
   return {
-    risk: r.risk,
-    level: riskLevel(r.risk),
-    onlyA: r.onlyA,
-    onlyB: r.onlyB,
+    risk,
+    level: riskLevel(risk),
+    onlyA: ta.length - sharedA,
+    onlyB: tb.length - sharedB,
     totalA: ta.length,
     totalB: tb.length,
-    shared: r.shared,
-    tagScore: Math.round(tagSimilarity(tags)),
-    pins,
-    zones: zoneStats(pins),
+    shared: all.filter((p) => p.who === "both").length,
+    tagScore,
+    ...(tasteRisk != null && { tasteRisk, placeRisk: pr, pairedA, pairedB }),
+    pins: all,
+    zones: zoneStats(all),
     topTags: [...tags].sort((x, y) => y.score - x.score).slice(0, 8),
   };
 }

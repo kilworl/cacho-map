@@ -5,7 +5,7 @@ import { buildTools, toolSnapshot } from "./tools";
 import { checkJoke, checkReferences, fold, type OwnershipCtx } from "./ownership";
 import type { TasteEntity } from "../types";
 import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
-import { cleanLine, inLang, sanitizeRoast } from "./sanitize";
+import { cleanLine, inLang, sanitizeRoast, tameAdjectives } from "./sanitize";
 import { judgeModelId, modelId } from "./model";
 import { fallbackRoast } from "./fallback";
 import { fixGender, type Person } from "./gender";
@@ -207,7 +207,7 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
   }
   const safe = fallbackRoast(a, b, score, lang, tastesA, tastesB);
   const own = ownershipCtx(input);
-  const cleanPlan = fixGender(cleanLine(plan, score.risk), [a, b], lang);
+  const cleanPlan = fixGender(tameAdjectives(cleanLine(plan, score.risk), lang), [a, b], lang);
   const planOk = cleanPlan && inLang(cleanPlan, lang) && checkJoke("", cleanPlan, own).ok && checkReferences(cleanPlan, own).ok;
   return {
     roast: { ...(best ?? { title: safe.title, roast: safe.roast }), plan: planOk ? cleanPlan : safe.plan },

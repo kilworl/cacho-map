@@ -30,6 +30,28 @@ export function fixPunctuation(t: string): string {
     .trim();
 }
 
+/** "restaurantes restaurantes" -> "restaurantes" (lowercase only, so "Bora Bora" stays). */
+export const dedupeWords = (t: string) => t.replace(/(?<![\p{L}])(\p{Ll}{2,})(\s+\1)+(?![\p{L}])/gu, "$1");
+
+/** Words that open a clause where a comma before the verb is fine ("Si llueve, es mejor…"). */
+const SUBORD = /(^|\s)(si|cuando|aunque|mientras|porque|como|pero|ya que|apenas|if|when|although|while|because|since|though|as|but)\s/i;
+/** "cada salida a X sin Valentina, es un ataque" -> no comma between subject and verb. */
+export function fixSubjectComma(t: string): string {
+  return t.replace(/(^|[.:;!?…]\s*)([^.:;!?…,]+),\s+(es|son|era|eran|fue|será|sería|is|are|was|were)\b/giu, (m, pre: string, subj: string, verb: string) =>
+    SUBORD.test(` ${subj} `) || subj.trim().split(/\s+/).length < 3 ? m : `${pre}${subj} ${verb}`);
+}
+
+/** Vibes the data never backs ("romántico", "mágico", "perfect"): removed from plans and descriptions. */
+const OVERSTATED: Record<Lang, RegExp> = {
+  es: /(,\s*|\s+y\s+|\s+)(muy\s+|super\s+|súper\s+)?(romántic[oa]s?|mágic[oa]s?|perfect[oa]s?|inolvidables?|espectaculares?|increíbles?|ideal(es)?|paradisíac[oa]s?|encantador(a|es|as)?|idílic[oa]s?|tranquil[oa]s?)(?![\p{L}])/giu,
+  en: /(,\s*|\s+and\s+|\s+)(very\s+|super\s+)?(romantic|magical|perfect|unforgettable|amazing|stunning|breathtaking|charming|idyllic|ideal|dreamy|quiet|tranquil)(?![\p{L}])/giu,
+};
+export function tameAdjectives(t: string, lang: Lang): string {
+  let out = t.replace(OVERSTATED[lang], "");
+  if (lang === "en") out = out.replace(/\b([Aa])n (?=[b-df-hj-np-tv-z])/g, "$1 ").replace(/\b([Aa]) (?=[aeiou])/g, "$1n ");
+  return fixPunctuation(out);
+}
+
 const sentences = (t: string) => t.split(/(?<=[.!?…])\s+/).filter(Boolean);
 const capFirst = (t: string) => t.charAt(0).toLocaleUpperCase() + t.slice(1);
 
@@ -41,7 +63,7 @@ export function cleanLine(text: string, pct: number): string {
     const nums = [...s.matchAll(/(\d{1,3})\s?%/g)].map((m) => Number(m[1]));
     return nums.every((n) => n === pct);
   });
-  return fixPunctuation(capFirst(kept.join(" ").replace(LEADING_SLANG, (_m, pre: string, ch: string) => pre + ch.toLocaleUpperCase()).replace(TRAILING_SLANG, ".").replace(/[.…]\.+$/, ".").replace(CORNY_OPENER, "").replace(/¡/g, "").replace(/!+/g, ".")));
+  return fixPunctuation(capFirst(fixSubjectComma(dedupeWords(kept.join(" "))).replace(LEADING_SLANG, (_m, pre: string, ch: string) => pre + ch.toLocaleUpperCase()).replace(TRAILING_SLANG, ".").replace(/[.…]\.+$/, ".").replace(CORNY_OPENER, "").replace(/¡/g, "").replace(/!+/g, ".")));
 }
 
 /** Enforces the output contract on whatever the LLM produced. */
@@ -53,7 +75,7 @@ export function sanitizeRoast(r: Roast, pct: number, lang: Lang, worstZone?: str
     const tail = title.includes("·") ? title.split("·").slice(1).join("·").replace(/\d+\s?%/g, "").trim() : "";
     title = tail ? `${label} · ${tail}` : worstZone ? `${label} · ${worstZone}` : label;
   }
-  return { title, roast: cleanLine(r.roast, pct), plan: cleanLine(r.plan, pct) };
+  return { title, roast: cleanLine(r.roast, pct), plan: tameAdjectives(cleanLine(r.plan, pct), lang) };
 }
 
 const ES_WORDS = new Set(

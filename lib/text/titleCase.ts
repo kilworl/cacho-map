@@ -1,6 +1,9 @@
 const SMALL = new Set(["de", "del", "la", "las", "el", "los", "y", "e", "en", "of", "the", "and", "a", "da", "do"]);
 
-const cap = (w: string) => w.charAt(0).toLocaleUpperCase("es") + w.slice(1).toLocaleLowerCase("es");
+/** Roman numerals stay uppercase ("Juan XXIII", "Pío XII"); 2+ letters so "mi"/"di"/"I" aren't touched. */
+const ROMAN = /^(?=[ivxlc]{2,}$)c{0,3}(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$/i;
+const isRoman = (w: string) => ROMAN.test(w) && !/^(vi|li|lix|civ|ci)$/i.test(w);
+const cap = (w: string) => (isRoman(w) ? w.toUpperCase() : w.charAt(0).toLocaleUpperCase("es") + w.slice(1).toLocaleLowerCase("es"));
 const isAllCaps = (w: string) => /\p{Lu}/u.test(w) && w === w.toLocaleUpperCase("es") && /\p{L}{4,}/u.test(w);
 
 /**
@@ -18,6 +21,7 @@ export function normalizeName(raw: string): string {
   return name
     .split(" ")
     .map((w, i) => {
+      if (i > 0 && isRoman(w)) return w.toUpperCase();
       if (allLower) return i > 0 && SMALL.has(w) ? w : cap(w);
       if (!isAllCaps(w) && !(shouty && /\p{L}/u.test(w) && w === w.toLocaleUpperCase("es"))) return w;
       const lower = w.toLocaleLowerCase("es");
