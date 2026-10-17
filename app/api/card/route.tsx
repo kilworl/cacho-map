@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       </div>
       <div style={{ fontSize: 28, display: "flex", justifyContent: "space-between", opacity: 0.85 }}>
         <span>{en ? "Only cheating on plans. It's a joke" : "Solo cachos de planes. Es un chiste"}</span>
-        <span>Powered by Qloo taste AI</span>
+        <span>{en ? "Powered by Qloo taste AI" : "Gustos por la IA de Qloo"}</span>
       </div>
     </div>,
     { width: 1080, height: 1350, fonts: await fonts },

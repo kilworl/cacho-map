@@ -45,14 +45,15 @@ export function riskLevel(risk: number): RiskLevel {
 
 /** Builds map pins: places both would like, or only one of them. */
 export function buildPins(pa: ZonedPlace[], pb: ZonedPlace[]): Pin[] {
-  const idsB = new Set(pb.map((p) => p.id));
+  const byB = new Map(pb.map((p) => [p.id, p]));
   const pins = new Map<string, Pin>();
-  const toPin = (p: ZonedPlace, who: Pin["who"]): Pin => ({
+  const toPin = (p: ZonedPlace, who: Pin["who"], fromA?: number[], fromB?: number[]): Pin => ({
     id: p.id, name: p.name, lat: p.lat, lon: p.lon, who, zone: p.zone, genre: p.genre, rating: p.rating, image: p.image,
     priceLevel: p.priceLevel, description: p.description, tags: p.tags,
+    ...(fromA?.length && { fromA }), ...(fromB?.length && { fromB }),
   });
-  for (const p of pa) pins.set(p.id, toPin(p, idsB.has(p.id) ? "both" : "a"));
-  for (const p of pb) if (!pins.has(p.id)) pins.set(p.id, toPin(p, "b"));
+  for (const p of pa) pins.set(p.id, toPin(p, byB.has(p.id) ? "both" : "a", p.from, byB.get(p.id)?.from));
+  for (const p of pb) if (!pins.has(p.id)) pins.set(p.id, toPin(p, "b", undefined, p.from));
   return [...pins.values()];
 }
 
@@ -76,12 +77,19 @@ export function zoneStats(pins: Pin[]): ZoneStat[] {
       };
       const onlyA = ex("a");
       const onlyB = ex("b");
+      // Which tastes brought this zone's places, per person (strongest taste per place).
+      const count = (key: "fromA" | "fromB"): [number, number][] => {
+        const m = new Map<number, number>();
+        for (const p of ps) { const i = p[key]?.[0]; if (i != null) m.set(i, (m.get(i) ?? 0) + 1); }
+        return [...m].sort((x, y) => y[1] - x[1]);
+      };
       return {
         zone, n: ps.length, both, a, b, riskPct,
         kind: (riskPct >= 50 ? "danger" : "safe") as ZoneStat["kind"],
         lat: ps.reduce((s, p) => s + p.lat, 0) / ps.length,
         lon: ps.reduce((s, p) => s + p.lon, 0) / ps.length,
         profile: zoneProfile(ps),
+        byA: count("fromA"), byB: count("fromB"),
         ...(onlyA && { onlyA }), ...(onlyB && { onlyB }),
       };
     })

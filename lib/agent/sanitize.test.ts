@@ -68,3 +68,15 @@ describe("title cleanup", () => {
     expect(fixPunctuation("un 'creep,' de verdad")).toBe("un 'creep,' de verdad");
   });
 });
+
+describe("inLang guard", () => {
+  it("catches the Spanish plan Jesús saw in EN mode", () => {
+    const es = "Podrían ir a Juan Valdez en Crespo, donde a ambos les gusta el café, y así disfrutan juntos de una tarde tranquila en Cartagena.";
+    expect(inLang(es, "en")).toBe(false);
+    expect(inLang(es, "es")).toBe(true);
+    expect(inLang("They could grab coffee at Juan Valdez in Crespo and enjoy a quiet afternoon together.", "en")).toBe(true);
+    expect(inLang("They could grab coffee at Juan Valdez in Crespo and enjoy a quiet afternoon together.", "es")).toBe(false);
+    expect(inLang("Gimnasio", "es")).toBe(true);
+    expect(inLang("Modern movie theater complex offering mainstream film screenings.", "es")).toBe(false);
+  });
+});

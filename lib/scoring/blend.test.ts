@@ -55,3 +55,15 @@ describe("stability", () => {
     expect(f.a.some((p) => p.id.startsWith("pop"))).toBe(false);
   });
 });
+
+describe("attribution", () => {
+  it("records which inputs brought each place, strongest first", () => {
+    const gym = { kind: "typed" as const, places: [{ id: "g1" }, { id: "g2" }, { id: "x" }] };
+    const anime = { kind: "typed" as const, places: [{ id: "c1" }, { id: "x" }] };
+    const f = favoritePlaces([gym, anime], [{ kind: "typed", places: [{ id: "c1" }] }], 20);
+    const by = Object.fromEntries(f.a.map((p) => [p.id, p.from]));
+    expect(by.g1).toEqual([0]);
+    expect(by.c1).toEqual([1]);
+    expect(by.x).toEqual([1, 0]); // rank 1 in anime beats rank 2 in gym
+  });
+});

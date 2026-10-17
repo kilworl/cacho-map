@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 const nick = z.string().transform((s) => s.replace(/[<>]/g, "").trim().slice(0, 24));
-const tastes = z.string().max(400).transform((s) =>
-  s.split(/[,\n;]/).map((x) => x.replace(/[<>]/g, "").trim().slice(0, 60)).filter(Boolean),
-);
+/** Free text per person ("me gusta el gym y ver anime"); a list is joined for older clients. */
+const tastes = z
+  .union([z.string().max(500), z.array(z.string().max(80)).max(12).transform((xs) => xs.join(", "))])
+  .transform((s) => s.replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 500));
 
 const pronoun = z.enum(["m", "f", "n"]).default("n");
 

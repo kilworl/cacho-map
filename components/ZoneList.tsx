@@ -1,11 +1,10 @@
 "use client";
-import type { ZoneStat } from "@/lib/types";
+import type { MatchResult, ZoneStat } from "@/lib/types";
 import { useI18n } from "@/lib/i18n/LangProvider";
+import { zoneWhy } from "@/lib/explain";
 
 interface Props {
-  zones: ZoneStat[];
-  a: string;
-  b: string;
+  r: MatchResult;
   onPick: (z: ZoneStat) => void;
 }
 
@@ -13,8 +12,9 @@ interface Props {
  * Danger zones (places only one of them likes: one would go alone) and safe zones
  * (places both like). Each card has a characterization built from Qloo place data.
  */
-export function ZoneList({ zones, onPick }: Props) {
-  const { t } = useI18n();
+export function ZoneList({ r, onPick }: Props) {
+  const { t, lang } = useI18n();
+  const zones = r.zones;
   const danger = zones.filter((z) => z.kind === "danger").slice(0, 3);
   const safe = zones.filter((z) => z.kind === "safe").slice(0, 2);
   return (
@@ -31,7 +31,7 @@ export function ZoneList({ zones, onPick }: Props) {
               </span>
               <span className="zone-meta">{t.zoneLine(z.n, z.both)}</span>
               {z.description && <span className="zone-desc">{z.description}</span>}
-              {z.why && <span className="zone-why">{z.why}</span>}
+              <span className="zone-why">{zoneWhy(z, r, lang)}</span>
             </button>
           </li>
         ))}

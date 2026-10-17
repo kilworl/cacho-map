@@ -16,6 +16,8 @@ export interface PinLabels {
 }
 
 interface Props {
+  /** Accessible name of the map region, in the UI language. */
+  label: string;
   center: GeoPoint;
   pins: Pin[];
   zones: ZoneStat[];
@@ -27,12 +29,13 @@ interface Props {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function popupHtml(p: Pin, labels: PinLabels): string {
-  const meta = [p.tags?.genres?.[0] ?? p.genre, p.tags?.cuisines?.[0], p.zone].filter(Boolean).map((x) => esc(String(x))).join(" · ");
+  const meta = [p.typeLabel, p.zone].filter(Boolean).map((x) => esc(String(x))).join(" · ");
   const img = p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" />` : "";
   const rating = p.rating ? `<span class="pop-rating">★ ${p.rating.toFixed(1)}</span>` : "";
   const summary = p.summary ? `<p class="pop-sum">${esc(p.summary)}</p>` : "";
   const plan = p.plan ? `<p class="pop-plan">${esc(p.plan)}</p>` : "";
-  return `<div class="pop pop--${p.who}">${img}<div class="pop-body"><span class="pop-who">${esc(labels[p.who])}</span><strong>${esc(p.name)}</strong><small>${meta} ${rating}</small>${summary}${plan}</div></div>`;
+  const why = p.why ? `<p class="pop-why">${esc(p.why)}</p>` : "";
+  return `<div class="pop pop--${p.who}">${img}<div class="pop-body"><span class="pop-who">${esc(labels[p.who])}</span><strong>${esc(p.name)}</strong><small>${meta} ${rating}</small>${why}${summary}${plan}</div></div>`;
 }
 
 function zonesGeoJSON(zones: ZoneStat[]): GeoJSON.FeatureCollection {
@@ -46,7 +49,7 @@ function zonesGeoJSON(zones: ZoneStat[]): GeoJSON.FeatureCollection {
   };
 }
 
-export default function CachoMap({ center, pins, zones, labels, focus }: Props) {
+export default function CachoMap({ label, center, pins, zones, labels, focus }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -150,5 +153,5 @@ export default function CachoMap({ center, pins, zones, labels, focus }: Props) 
     if (focus) map.current?.flyTo({ center: [focus.lon, focus.lat], zoom: 15, speed: 1.2, curve: 1.5, essential: true });
   }, [focus]);
 
-  return <div ref={el} className="map-canvas" role="region" aria-label="Map" />;
+  return <div ref={el} className="map-canvas" role="region" aria-label={label} />;
 }

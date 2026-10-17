@@ -4,10 +4,15 @@
  * can't take over the whole list, and removes "popular for anyone" places.
  */
 
-export type InputKind = "title" | "cuisine" | "category";
+/**
+ * "typed" = places of the kinds a taste obviously leads to (gyms for "gym", cinemas for
+ * "anime"), ranked by Qloo for that taste: the most telling lists. The others are Qloo's
+ * general place picks for a title / cuisine / category signal.
+ */
+export type InputKind = "typed" | "title" | "cuisine" | "category";
 
-/** Relative weight by input kind: specific titles count most, broad categories least. */
-export const KIND_WEIGHT: Record<InputKind, number> = { title: 1, cuisine: 0.6, category: 0.3 };
+/** Relative weight by input kind: typed and specific titles count most, broad categories least. */
+export const KIND_WEIGHT: Record<InputKind, number> = { typed: 1.2, title: 1, cuisine: 0.6, category: 0.3 };
 /** No single input may contribute more than this share of a person's blend (when there are 3+ inputs). */
 export const MAX_SHARE = 0.4;
 /** Ranks deeper than this in a list score 0. */
@@ -48,20 +53,28 @@ export function popularBaseline<T extends { id: string }>(lists: T[][], share = 
   return new Map([...freq].filter(([, c]) => c >= min));
 }
 
-/** Weighted rank-score blend of a person's per-input lists. */
-export function blendScores<T extends { id: string }>(lists: InputList<T>[]): { place: T; score: number }[] {
+/**
+ * Weighted rank-score blend of a person's per-input lists. `from` lists the inputs
+ * (list indices) that brought each place, biggest contribution first: that's the
+ * "you get this place because of your taste for X" explanation.
+ */
+export function blendScores<T extends { id: string }>(lists: InputList<T>[]): { place: T; score: number; from: number[] }[] {
   const w = inputWeights(lists.map((l) => l.kind));
-  const acc = new Map<string, { place: T; score: number; first: number }>();
+  const acc = new Map<string, { place: T; score: number; first: number; parts: Map<number, number> }>();
   let order = 0;
   lists.forEach((l, i) =>
     l.places.slice(0, DEPTH).forEach((p, rank) => {
       const s = w[i] * (1 - rank / DEPTH);
       const cur = acc.get(p.id);
-      if (cur) cur.score += s;
-      else acc.set(p.id, { place: p, score: s, first: order++ });
+      if (cur) {
+        cur.score += s;
+        cur.parts.set(i, (cur.parts.get(i) ?? 0) + s);
+      } else acc.set(p.id, { place: p, score: s, first: order++, parts: new Map([[i, s]]) });
     }),
   );
-  return [...acc.values()].sort((x, y) => y.score - x.score || x.first - y.first);
+  return [...acc.values()]
+    .sort((x, y) => y.score - x.score || x.first - y.first)
+    .map(({ place, score, parts }) => ({ place, score, from: [...parts].sort((x, y) => y[1] - x[1]).map(([i]) => i) }));
 }
 
 /**
@@ -74,7 +87,7 @@ export function favoritePlaces<T extends { id: string }>(
   top = 20,
   /** Lists for unrelated "probe" tastes in the same city; what they share is popular for anyone. */
   probes?: T[][],
-): { a: T[]; b: T[]; generic: string[] } {
+): { a: (T & { from: number[] })[]; b: (T & { from: number[] })[]; generic: string[] } {
   const sa = blendScores(a);
   const sb = blendScores(b);
   const base = probes && probes.length >= 3 ? popularBaseline(probes, 0.75, 3) : popularBaseline([...a, ...b].map((l) => l.places));
@@ -85,6 +98,6 @@ export function favoritePlaces<T extends { id: string }>(
     if (left(sa) < top || left(sb) < top) break;
     removed.add(id);
   }
-  const pick = (s: typeof sa) => s.filter((x) => !removed.has(x.place.id)).slice(0, top).map((x) => x.place);
+  const pick = (s: typeof sa) => s.filter((x) => !removed.has(x.place.id)).slice(0, top).map((x) => ({ ...x.place, from: x.from }));
   return { a: pick(sa), b: pick(sb), generic: [...removed] };
 }

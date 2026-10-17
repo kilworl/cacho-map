@@ -8,6 +8,8 @@ import type { MatchResult, ZoneStat } from "@/lib/types";
 import { shareQuery } from "@/lib/share";
 import { useI18n } from "@/lib/i18n/LangProvider";
 import { WHO_COLOR } from "./map/mapTheme";
+import { breakdown, list, pctChain, tasteName } from "@/lib/explain";
+import { isPlaceKind, placeKindLabel } from "@/lib/places/catalog";
 
 interface Props {
   r: MatchResult;
@@ -16,7 +18,7 @@ interface Props {
 }
 
 export function ResultView({ r, onZone, onReset }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const q = shareQuery(r);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/r?${q}` : "";
   const [label, ...rest] = r.roast.title.split(" · ");
@@ -39,10 +41,16 @@ export function ResultView({ r, onZone, onReset }: Props) {
           </div>
           <span className="risk-level">{t.levels[r.level]}</span>
         </div>
-        <p className="pct-explain">{t.pctExplain(r.risk)}</p>
+        <p className="pct-explain">{pctChain(r, lang)}</p>
         <details className="how-calc">
           <summary>{t.howCalcTitle}</summary>
           <ul>{t.howCalc(r.a, r.b, r.totalA, r.onlyA, r.totalB, r.onlyB, r.risk).map((line) => <li key={line}>{line}</li>)}</ul>
+          {breakdown(r, lang).map((b) => (
+            <div key={b.title} className="breakdown">
+              <p>{b.title}</p>
+              <ul>{b.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+            </div>
+          ))}
         </details>
         <h2 className="result-title">
           <ShinyText text={rest.join(" · ") || label} color="#1a1410" shineColor="#ff3b1f" speed={3} />
@@ -64,7 +72,7 @@ export function ResultView({ r, onZone, onReset }: Props) {
 
       <Understood r={r} />
 
-      <ZoneList zones={r.zones} a={r.a} b={r.b} onPick={onZone} />
+      <ZoneList r={r} onPick={onZone} />
 
       <div className="legend" aria-hidden="true">
         <span><i style={{ background: WHO_COLOR.both }} />{t.legendBoth}</span>
@@ -97,13 +105,15 @@ export function ResultView({ r, onZone, onReset }: Props) {
   );
 }
 
-/** "What Qloo understood": per person, what each typed taste resolved to, and what it couldn't match. */
+/** "What Qloo understood": per person, each atomic taste, what Qloo matched it to and which places it looks for; rejected ones crossed out with the reason. */
 function Understood({ r }: { r: MatchResult }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const people = [
     { who: r.a, side: "a", found: r.tastesA, missing: r.missingA },
     { who: r.b, side: "b", found: r.tastesB, missing: r.missingB },
   ] as const;
+  const reason = (m: MatchResult["missingA"][number]) =>
+    m.reason === "low_confidence" && m.got ? t.missingReason.low_confidence(m.got) : m.reason === "no_places" ? t.missingReason.no_places : t.missingReason.no_match;
   return (
     <section className="understood">
       <h3>{t.qlooSaw}</h3>
@@ -111,20 +121,29 @@ function Understood({ r }: { r: MatchResult }) {
         <div key={p.side} className={`understood-row understood--${p.side}`}>
           <span className="understood-who">{p.who}</span>
           <div className="chips">
-            {p.found.map((e) => (
-              <span key={e.id} className="chip chip--ok" title={e.input}>
-                {e.name}
-                <small>{e.type === "tag" ? t.category : e.type.replace("_", " ")}</small>
-                {e.input.toLowerCase() !== e.name.toLowerCase() && <em>← {e.input}</em>}
-              </span>
-            ))}
+            {p.found.map((e) => {
+              const label = tasteName(e, lang);
+              const kinds = e.placeMode === "typed" ? (e.places ?? []).filter(isPlaceKind).map((k) => placeKindLabel(k, lang)) : [];
+              const qloo = e.type !== "place_kind" && e.name.toLowerCase() !== label.toLowerCase() ? e.name : "";
+              return (
+                <span key={e.id} className="chip chip--ok" title={e.input}>
+                  {label}
+                  <small>{t.entityTypes[e.type] ?? e.type.replace("_", " ")}</small>
+                  {qloo && <em>= {qloo}</em>}
+                  {kinds.length > 0 && <em>→ {list(kinds.slice(0, 2), lang)}</em>}
+                </span>
+              );
+            })}
             {p.missing.map((m) => (
-              <span key={m} className="chip chip--miss" title={t.missingHint}>✕ {m}</span>
+              <span key={m.input} className="chip chip--miss" title={reason(m)}>
+                <s>{m.label ? (lang === "es" ? m.label.es : m.label.en) : m.input}</s>
+                <em>{reason(m)}</em>
+              </span>
             ))}
           </div>
         </div>
       ))}
-      {(r.missingA.length > 0 || r.missingB.length > 0) && <p className="fine">{t.missing}: {t.missingHint}</p>}
+      {(r.missingA.length > 0 || r.missingB.length > 0) && <p className="fine">{t.missingNote}</p>}
     </section>
   );
 }

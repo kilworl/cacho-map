@@ -15,7 +15,8 @@ export interface FormValues {
 }
 
 export const EMPTY_FORM: FormValues = { an: "", at: "", ap: "n", bn: "", bt: "", bp: "n", consent: false };
-const EXAMPLE: FormValues = { an: "Caro", at: "Mentalista, videojuegos, superhéroes, Rápido y furioso", ap: "f", bn: "Dani", bt: "Taylor Swift, Gilmore Girls, Harry Potter, comida mexicana", bp: "n", consent: true };
+/** The demo couple, written the way people talk. */
+const example = (at: string, bt: string): FormValues => ({ an: "Jesús", at, ap: "m", bn: "Karol", bt, bp: "f", consent: true });
 const PRONOUNS: Pronoun[] = ["n", "f", "m"];
 
 /** Appends a suggestion to a comma-separated list, skipping duplicates. */
@@ -48,7 +49,7 @@ export function MatchForm({ values: f, onChange, onSubmit, busy }: Props) {
     >
       <p className="hint">
         {t.tastesHint}{" "}
-        <button type="button" className="linkish" onClick={() => onChange(EXAMPLE)}>{t.example}</button>
+        <button type="button" className="linkish" onClick={() => onChange(example(t.exampleA, t.exampleB))}>{t.example}</button>
       </p>
 
       <div className="players">
@@ -65,7 +66,7 @@ export function MatchForm({ values: f, onChange, onSubmit, busy }: Props) {
                 ))}
               </div>
             </div>
-            <textarea required rows={3} maxLength={400} placeholder={p.tastesPh} value={f[p.tastes]} onChange={(e) => set(p.tastes, e.target.value)} aria-label={`${p.label}: ${t.tastesHint}`} />
+            <textarea required rows={3} maxLength={500} placeholder={p.tastesPh} value={f[p.tastes]} onChange={(e) => set(p.tastes, e.target.value)} aria-label={`${p.label}: ${t.tastesHint}`} />
             <div className="chips" aria-label={t.suggest}>
               <span>{t.suggest}</span>
               {p.ideas.map((idea) => (

@@ -28,6 +28,43 @@ export interface TasteQuery {
   type?: EntityType;
 }
 
+export interface TasteLabel {
+  es: string;
+  en: string;
+  esArt?: string;
+}
+
+/** What kind of thing an atomic taste is: a specific title, a genre, a food, or a lifestyle activity. */
+export type TasteKind = "title" | "genre" | "food" | "activity";
+
+/** One atomic taste split out of a person's free text ("me gusta el gym y ver anime" -> gym, anime). */
+export interface ParsedTaste {
+  /** The words as the person wrote them. */
+  input: string;
+  /** Display label in both languages ("películas de acción" / "action movies"); esArt adds the Spanish article ("las películas de acción"). */
+  label: TasteLabel;
+  kind: TasteKind;
+  /** Canonical English Qloo query ("Action", "The Mentalist", "K-drama"). */
+  query: string;
+  /** Other English queries to try ("desserts" for "strawberries and cream"). */
+  alt?: string[];
+  type?: EntityType;
+  /** Which Qloo tag family fits a genre/food: media, music or food. */
+  domain?: "media" | "music" | "food";
+  /** Place kinds a fan would obviously go to because of this taste (lib/places/catalog). */
+  places: string[];
+}
+
+/** A taste we couldn't use, shown crossed out with the reason. */
+export interface MissingTaste {
+  input: string;
+  label?: { es: string; en: string };
+  /** no_match: Qloo found nothing; low_confidence: Qloo's best match was something else; no_places: no such places nearby. */
+  reason: "no_match" | "low_confidence" | "no_places";
+  /** What Qloo returned when we rejected it as a wrong match ("40k"). */
+  got?: string;
+}
+
 /** A taste Qloo understood: an entity (urn:entity:…) or a tag (urn:tag:…) for categories. */
 export interface TasteEntity {
   id: string;
@@ -40,11 +77,21 @@ export interface TasteEntity {
   akas?: string[];
   /** Qloo short description / description text. */
   facts?: string;
+  kind?: TasteKind;
+  label?: TasteLabel;
+  /** False for lifestyle tastes understood only as place kinds (no Qloo taste entity). */
+  signal?: boolean;
+  /** Place kinds used to find this taste's places. */
+  places?: string[];
+  /** How its places were found: "typed" = Qloo places of those kinds ranked for this taste; "general" = Qloo's places for fans of it. */
+  placeMode?: "typed" | "general";
+  /** How many Qloo places this taste brought (before blending). */
+  placeCount?: number;
 }
 
 export interface ResolvedTastes {
   found: TasteEntity[];
-  missing: string[];
+  missing: MissingTaste[];
 }
 
 /** Descriptive Qloo tags of a place (all from Qloo data, in English). */
@@ -68,6 +115,8 @@ export interface Place extends GeoPoint {
   /** Qloo's short description (English). */
   description?: string;
   tags?: PlaceTags;
+  /** Indices of the person's tastes whose Qloo list brought this place, strongest first. */
+  from?: number[];
 }
 
 /** A Place after we assigned it to a zone (neighborhood). */
@@ -97,6 +146,12 @@ export interface Pin extends GeoPoint {
   summary?: string;
   /** Localized one-line plan: what you'd do there. */
   plan?: string;
+  /** Which of A's / B's tastes (indices into tastesA / tastesB) produced this place, strongest first. */
+  fromA?: number[];
+  fromB?: number[];
+  /** Client-side, in the UI language: why this place shows up, and its kind. */
+  why?: string;
+  typeLabel?: string;
 }
 
 /** A place that explains a zone clash: only one of them would pick it. */
@@ -130,6 +185,9 @@ export interface ZoneStat extends GeoPoint {
   description?: string;
   /** Localized reason why it's risky/safe for this couple. */
   why?: string;
+  /** [taste index, number of this zone's places it produced] for A and B, most first. */
+  byA?: [number, number][];
+  byB?: [number, number][];
 }
 
 export type RiskLevel = "low" | "medium" | "high" | "cheating";
@@ -164,8 +222,8 @@ export interface MatchResult extends ScoreResult {
   city: CityContext;
   tastesA: TasteEntity[];
   tastesB: TasteEntity[];
-  missingA: string[];
-  missingB: string[];
+  missingA: MissingTaste[];
+  missingB: MissingTaste[];
   roast: Roast;
   agent: "llm" | "fallback";
   toolCalls: string[];
@@ -175,5 +233,7 @@ export interface MatchResult extends ScoreResult {
   pronounB?: Pronoun;
   /** How many "popular for anyone" places were left out of the comparison. */
   popularRemoved?: number;
+  /** Whether the LLM or the heuristic split the free text into tastes. */
+  parsedBy?: "llm" | "heuristic";
   timings: Record<string, number>;
 }

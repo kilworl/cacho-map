@@ -56,13 +56,23 @@ export function sanitizeRoast(r: Roast, pct: number, lang: Lang, worstZone?: str
   return { title, roast: cleanLine(r.roast, pct), plan: cleanLine(r.plan, pct) };
 }
 
-const ES_WORDS = new Set("el la los las que con de y es un una para no se su le lo del al por como pero muy más ya".split(" "));
-const EN_WORDS = new Set("the and is a to of with for her his they it at in on but that this you if not".split(" "));
+const ES_WORDS = new Set(
+  "el la los las que con de y es un una unos unas para no se su sus le les lo del al por como pero muy más mas ya en donde cuando ambos juntos juntas podrían pueden puede van ir hay este esta estos estas eso esto tiene tienen sin sobre entre también tambien hasta desde porque mientras sale salen otra otro cada vez solo sola aquí aqui allá así asi ser son está están fue tarde noche plan planes lugar lugares comer tomar ver disfrutar disfrutan".split(" "),
+);
+const EN_WORDS = new Set(
+  "the and is to of with for her his they it at in on but that this you your our we us my me he she him what who which how all any only also again here than then about after before been try pick if not are be can could would will their them there where when both together while from into out just some each other place places go get have has was were do does an or by so very more enjoy grab watch eat drink".split(" "),
+);
 
-/** Crude language check so an English request never shows a Spanish roast (and vice versa). */
+/**
+ * Rough language check for model output (common function words, plus Spanish-only
+ * letters). English text must clearly win; Spanish wins ties (names, "sushi").
+ */
 export function inLang(text: string, lang: Lang): boolean {
   const words = text.toLowerCase().match(/\p{L}+/gu) ?? [];
-  const es = words.filter((w) => ES_WORDS.has(w)).length;
+  const es = words.filter((w) => ES_WORDS.has(w)).length + (text.match(/[ñáéíóú¿¡]/gi)?.length ?? 0);
   const en = words.filter((w) => EN_WORDS.has(w)).length;
-  return lang === "es" ? es >= en : en >= es;
+  // Sentence-length text must show at least one function word of its language.
+  const long = words.length >= 4;
+  if (lang === "es") return es >= en && (!long || es > 0);
+  return en > es || (!long && en === 0 && es === 0);
 }

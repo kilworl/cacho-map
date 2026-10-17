@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { CityContext, GeoPoint, MatchResult, ZoneStat } from "@/lib/types";
+import type { CityContext, GeoPoint, Lang, MatchResult, ZoneStat } from "@/lib/types";
 import { DEFAULT_CITY } from "@/lib/geo/cities";
 import { useI18n } from "@/lib/i18n/LangProvider";
 import type { ErrorCode } from "@/lib/i18n/dict";
@@ -12,6 +12,8 @@ import { LocationPicker } from "./LocationPicker";
 import { EMPTY_FORM, MatchForm, type FormValues } from "./MatchForm";
 import { LoadingState } from "./LoadingState";
 import { ResultView } from "./ResultView";
+import { placeWhy } from "@/lib/explain";
+import { placeType } from "@/lib/i18n/placeTypes";
 
 const CachoMap = dynamic(() => import("./map/CachoMap"), { ssr: false, loading: () => <div className="map-canvas map-skeleton" /> });
 
@@ -24,14 +26,14 @@ export function CachoApp() {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [focus, setFocus] = useState<(GeoPoint & { key: string }) | null>(null);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (l: Lang = lang) => {
     setState({ kind: "loading" });
     setFocus(null);
     try {
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ consent: form.consent, lang, city, a: { nick: form.an, tastes: form.at, pronoun: form.ap }, b: { nick: form.bn, tastes: form.bt, pronoun: form.bp } }),
+        body: JSON.stringify({ consent: form.consent, lang: l, city, a: { nick: form.an, tastes: form.at, pronoun: form.ap }, b: { nick: form.bn, tastes: form.bt, pronoun: form.bp } }),
       });
       const data = await res.json();
       if (!res.ok) setState({ kind: "error", code: (data.error as ErrorCode) in t.errors ? data.error : "busy" });
@@ -46,13 +48,23 @@ export function CachoApp() {
     () => ({ both: t.legendBoth, a: t.legendOnly(result?.a ?? "A"), b: t.legendOnly(result?.b ?? "B") }),
     [t, result?.a, result?.b],
   );
+  // Switching language with a result on screen re-runs it: the AI copy (verdict, plan, descriptions)
+  // is written in one language, so we regenerate instead of showing a mixed page.
+  const pins = useMemo(
+    () =>
+      (result?.pins ?? []).map((p) => {
+        const type = placeType(p.tags?.genres?.[0] ?? p.genre, lang);
+        return { ...p, why: placeWhy(p, result!, lang), typeLabel: type && (type.known || lang === "en") ? type.plural : undefined };
+      }),
+    [result, lang],
+  );
   const onZone = useCallback((z: ZoneStat) => setFocus({ lat: z.lat, lon: z.lon, key: `${z.zone}-${Date.now()}` }), []);
 
   return (
     <div className="shell">
       <header className="topbar">
         <Logo />
-        <LangToggle />
+        <LangToggle onSwitch={(l) => { if (result && result.lang !== l) void run(l); }} />
       </header>
 
       <main className="layout">
@@ -77,22 +89,19 @@ export function CachoApp() {
           {state.kind === "loading" && <LoadingState />}
           {(state.kind === "idle" || state.kind === "error") && (
             <>
-              <MatchForm values={form} onChange={setForm} onSubmit={run} busy={false} />
+              <MatchForm values={form} onChange={setForm} onSubmit={() => void run()} busy={false} />
               {state.kind === "error" && <p className="error" role="alert">{t.errors[state.code]}</p>}
             </>
           )}
           {result && (
             <>
-              {result.lang !== lang && (
-                <button type="button" className="btn btn--ghost regen" onClick={run}>{t.regen}</button>
-              )}
               <ResultView r={result} onZone={onZone} onReset={() => setState({ kind: "idle" })} />
             </>
           )}
         </section>
 
         <aside className="map-panel" id="map">
-          <CachoMap center={result?.city ?? city} pins={result?.pins ?? []} zones={result?.zones ?? []} labels={labels} focus={focus} />
+          <CachoMap label={t.mapLabel} center={result?.city ?? city} pins={pins} zones={result?.zones ?? []} labels={labels} focus={focus} />
           {!result && <p className="map-empty">{t.emptyMap}</p>}
           {result && (
             <p className="map-heat">

@@ -4,13 +4,14 @@ import type { Lang, Pin, ScoreResult, ZoneStat } from "../types";
 import { normalizeModelId } from "./model";
 import { fixGender, pronounHint, type Person } from "./gender";
 import { ambience, placeType, priceSigns } from "../i18n/placeTypes";
+import { inLang } from "./sanitize";
 
 /** How many zones / places get an LLM-phrased description. */
 export const ZONES_TO_DESCRIBE = 5;
 export const PLACES_TO_DESCRIBE = 26;
 
 const Schema = z.object({
-  zones: z.array(z.object({ zone: z.string(), description: z.string(), why: z.string() })),
+  zones: z.array(z.object({ zone: z.string(), description: z.string() })),
   places: z.array(z.object({ id: z.string(), summary: z.string(), plan: z.string() })),
 });
 
@@ -51,8 +52,10 @@ export function templatePlace(p: Pin, lang: Lang): { summary: string; plan: stri
   const genre = p.tags?.genres?.[0] ?? p.genre;
   const t = placeType(genre, lang);
   const cuisine = p.tags?.cuisines?.[0];
-  const summary = lang === "en" && p.description ? p.description : [genre, cuisine].filter(Boolean).join(" · ");
-  const plan = t ? (lang === "es" ? `Plan: ${t.plan} en ${p.name}.` : `Plan: ${t.plan} at ${p.name}.`) : "";
+  // Spanish copy never shows Qloo's English tags: only types we can translate.
+  const summary = lang === "en" ? p.description ?? [genre, cuisine].filter(Boolean).join(" · ") : t?.known ? t.plural.charAt(0).toUpperCase() + t.plural.slice(1) : "";
+  const name = p.name.replace(/[.\s]+$/, "");
+  const plan = t ? (lang === "es" ? `Plan: ${t.plan} en ${name}.` : `Plan: ${t.plan} at ${name}.`) : "";
   return { summary, plan };
 }
 
@@ -92,7 +95,6 @@ Person A is ${pronounHint(ctx.pa, ctx.lang)}, likes ${ctx.tastesA.join(", ")}. P
 STRICT RULE: use ONLY the facts in the JSON. Never invent places, foods, prices, history or vibes that are not listed. If a field is empty or null, don't mention it at all (never say something is "not specified"). Attribute a cuisine or type to a place only if that place's own fields list it.
 For each zone:
 - "description" (max 20 words): what the area is like (what kind of places, food, vibe, price), from place_types, cuisines, ambience, price. Don't mention the couple or the zone kind here.
-- "why" (max 22 words): kind "danger": name one example (exact name) liked by only ONE of them and say that person would end up going alone (playful "cacho"/cheating risk). Never say the other would join them there. kind "safe": name one example (exact name) liked_by "both" and say they'd go together. Never use generic phrases like "a pizza place" instead of the name. Don't say "danger zone"/"safe zone" literally.
 For each place: "summary" (max 14 words): what it is, from types/cuisines/qloo_description (translated), without repeating the place name. "plan" (max 12 words): a concrete thing to do there, matching its type.
 Respect each person's pronoun. Neutral: no gendered adjectives (${ctx.lang === "es" ? '"se iría sin compañía", never "solo/sola"' : 'use the name or "they"'}).
 ALL output text must be in ${ctx.lang === "es" ? "Spanish (translate qloo_description and tags to Spanish)" : "English"}.
@@ -123,8 +125,11 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 12_000): Pr
   // Fewer concurrent calls: the free tier throttles bursts (agent + judge run at the same time).
   const parts = await Promise.all([call({ zones: f.zones, places: [] }), call({ zones: [], places: f.places })]);
   const out = { zones: parts.flatMap((p) => p.zones ?? []), places: parts.flatMap((p) => p.places ?? []) };
+  // Language guard: anything the model wrote in the wrong language is replaced by the template.
   const clean = (s?: string, name?: string) => {
-    let t = s?.replace(/[!¡]/g, "").trim();
+    // Drop "prices not specified"-style filler the model adds despite the prompt.
+    let t = s?.replace(/[!¡]/g, "").split(/(?<=[.])\s+/).filter((x) => !/no especificad|sin especificar|not specified|unspecified|no disponible|not available/i.test(x)).join(" ").trim();
+    if (t && !inLang(t, ctx.lang)) return undefined;
     if (t && name && t.toLowerCase().startsWith(name.toLowerCase())) t = t.slice(name.length).replace(/^[\s:,.–-]+/, "");
     return t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : undefined;
   };
@@ -134,8 +139,7 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 12_000): Pr
     zones: r.zones.map((z) => {
       const t = templateZone(z, ctx);
       const llm = described.has(z.zone) ? out.zones.find((x) => x.zone === z.zone) : undefined;
-      const why = clean(llm?.why) && fixGender(clean(llm?.why)!, [ctx.pa, ctx.pb], ctx.lang);
-      return { ...z, description: clean(llm?.description) ?? t.description, why: why || t.why };
+      return { ...z, description: clean(llm?.description) ?? t.description, why: t.why };
     }),
     pins: r.pins.map((p) => {
       const t = templatePlace(p, ctx.lang);
