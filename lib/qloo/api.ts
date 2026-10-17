@@ -58,7 +58,7 @@ export async function resolveTastes(terms: string[]): Promise<{ found: TasteEnti
 const BORING = /store|shop|supermarket|mall|bank|naval|military|newspaper|publisher|record (label|company)|office|school|academ|universit|church|hospital|clinic|pharmac|gas station|parking|apartment|real estate|tour operator|serviced accommodation|corporate|government|embassy|consulate|airport|bus station|cemetery|dentist|gym|soccer club|stadium|event venue|lawyer|insurance|car |auto |hostel|hotel/i;
 
 /** Generic or non-date entities that leak into place results ("Cartagena de Indias", naval bases, libraries). */
-const BORING_NAME = /^(cartagena|bogot[aá]|medell[ií]n|barranquilla|cali|santa marta)( de indias)?$|naval|militar|bibliotec|library|universidad|colegio|hospital|cl[ií]nica|notar[ií]a|banco |hotel|hostal|hostel|aeropuerto|airport|school|facultad|academia|escuela|patin[oó]dromo|sociedad portuaria|espectador|edificio|^(cl|cra|calle|carrera|av)\.? /i;
+const BORING_NAME = /^(cartagena|bogot[aá]|medell[ií]n|barranquilla|cali|santa marta)( de indias)?$|naval|militar|bibliotec|library|universidad|colegio|hospital|cl[ií]nica|notar[ií]a|banco |hotel|hostal|hostel|aeropuerto|airport|school|facultad|academia|escuela|patin[oó]dromo|sociedad portuaria|espectador|edificio|barrio |residential|residencial|conjunto|condominio|colegiatura|unaula|^(cl|cra|calle|carrera|av)\.? /i;
 
 const genreOf = (e: RawEntity) =>
   e.tags?.find((t) => /genre:place/.test(t.id ?? t.tag_id ?? "") && t.name && t.name !== "Place")?.name;

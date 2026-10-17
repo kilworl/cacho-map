@@ -14,6 +14,9 @@ describe("cleanLine", () => {
   it("handles decomposed accents", () => {
     expect(cleanLine("Un rave en el mismo parlante, aja\u0301.", 10)).toBe("Un rave en el mismo parlante.");
   });
+  it("drops filler slang openers", () => {
+    expect(cleanLine("Majo quiere Billie. Eche, no son pareja.", 10)).toBe("Majo quiere Billie. No son pareja.");
+  });
   it("drops probability talk", () => {
     expect(cleanLine("Hay probabilidad de pelea. Eche.", 10)).toBe("Eche.");
   });

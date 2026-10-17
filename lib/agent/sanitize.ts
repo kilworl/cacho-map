@@ -8,6 +8,9 @@ const CORNY_OPENER = /^\s*(¡\s*)?(ay+|oye|vaya|bueno|uy|wow|oh|well)\b[,!.\s]*/
 const SLANG = "(?:eche|ajá|aja|qué nota|que nota|no joda)";
 const TRAILING_SLANG = new RegExp(`(?:(?<=\\p{L})[,;]|(?<=[.?]))\\s*${SLANG}\\s*\\.?\\s*$`, "iu");
 
+/** Slang used as a filler opener ("Eche, no son…") also reads forced. */
+const LEADING_SLANG = new RegExp(`(^|[.?]\\s+)${SLANG},\\s*(\\p{L})`, "giu");
+
 const sentences = (t: string) => t.split(/(?<=[.!?…])\s+/).filter(Boolean);
 const capFirst = (t: string) => t.charAt(0).toLocaleUpperCase() + t.slice(1);
 
@@ -18,7 +21,7 @@ export function cleanLine(text: string, pct: number): string {
     const nums = [...s.matchAll(/(\d{1,3})\s?%/g)].map((m) => Number(m[1]));
     return nums.every((n) => n === pct);
   });
-  return capFirst(kept.join(" ").replace(TRAILING_SLANG, ".").replace(/\.\.+$/, ".").replace(CORNY_OPENER, "").replace(/¡/g, "").replace(/!+/g, ".").replace(/\.\./g, ".").trim());
+  return capFirst(kept.join(" ").replace(LEADING_SLANG, (_m, pre: string, ch: string) => pre + ch.toLocaleUpperCase()).replace(TRAILING_SLANG, ".").replace(/\.\.+$/, ".").replace(CORNY_OPENER, "").replace(/¡/g, "").replace(/!+/g, ".").replace(/\.\./g, ".").trim());
 }
 
 /** Enforces the output contract on whatever the LLM produced. */
