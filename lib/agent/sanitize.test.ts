@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLine, fixPunctuation, inLang, sanitizeRoast } from "./sanitize";
+import { cleanLine, dedupeWords, fixPunctuation, fixSubjectComma, inLang, sanitizeRoast, tameAdjectives } from "./sanitize";
 
 describe("cleanLine", () => {
   it("drops sentences quoting zone percentages but keeps the overall one", () => {
@@ -78,5 +78,20 @@ describe("inLang guard", () => {
     expect(inLang("They could grab coffee at Juan Valdez in Crespo and enjoy a quiet afternoon together.", "es")).toBe(false);
     expect(inLang("Gimnasio", "es")).toBe(true);
     expect(inLang("Modern movie theater complex offering mainstream film screenings.", "es")).toBe(false);
+  });
+});
+
+describe("v8 text fixes", () => {
+  it("drops the comma between subject and verb, keeps it after a subordinate clause", () => {
+    expect(fixSubjectComma("A Andrés le gusta Attack on Titan: cada salida a Rezak Bar Club sin Valentina, es un ataque.")).toBe("A Andrés le gusta Attack on Titan: cada salida a Rezak Bar Club sin Valentina es un ataque.");
+    expect(fixSubjectComma("Si Mateo sale solo, es peligro.")).toBe("Si Mateo sale solo, es peligro.");
+  });
+  it("dedupes repeated lowercase words but not names", () => {
+    expect(dedupeWords("restaurantes restaurantes de mariscos")).toBe("restaurantes de mariscos");
+    expect(dedupeWords("Bora Bora Beach")).toBe("Bora Bora Beach");
+  });
+  it("removes vibes the data doesn't back", () => {
+    expect(tameAdjectives("Plan: un rato tranquilo y romántico en Bar Tu Candela.", "es")).toBe("Plan: un rato en Bar Tu Candela.");
+    expect(tameAdjectives("Grab drinks at an amazing rooftop.", "en")).toBe("Grab drinks at a rooftop.");
   });
 });

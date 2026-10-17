@@ -11,3 +11,12 @@ describe("normalizeName", () => {
     ["Café Havana", "Café Havana"],
   ])("%s -> %s", (input, out) => expect(normalizeName(input)).toBe(out));
 });
+
+describe("roman numerals", () => {
+  it("keeps them uppercase", () => {
+    expect(normalizeName("JUAN XXIII")).toBe("Juan XXIII");
+    expect(normalizeName("Juan Xxiii")).toBe("Juan XXIII");
+    expect(normalizeName("barrio pio xii")).toBe("Barrio Pio XII");
+    expect(normalizeName("MI CASA")).toBe("Mi Casa");
+  });
+});
