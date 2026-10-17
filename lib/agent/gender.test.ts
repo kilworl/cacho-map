@@ -12,6 +12,9 @@ describe("fixGender", () => {
   it("uses a neutral phrasing for elle", () => {
     expect(fixGender("Caro se iría sola a Doña Lola.", [caro("n"), dani("n")], "es")).toBe("Caro se iría sin compañía a Doña Lola.");
   });
+  it("follows a pronoun closer than any name", () => {
+    expect(fixGender("Andrés se pregunta qué pasa cuando ella sale solo al parque.", [{ nick: "Laura", pronoun: "f" }, { nick: "Andrés", pronoun: "m" }], "es")).toBe("Andrés se pregunta qué pasa cuando ella sale sola al parque.");
+  });
   it("handles infinitives", () => {
     expect(fixGender("Si a Dani se le ocurre salir solo, ojo.", [caro("f"), dani("n")], "es")).toBe("Si a Dani se le ocurre salir sin compañía, ojo.");
   });

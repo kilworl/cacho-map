@@ -34,6 +34,12 @@ function subjectAt(s: string, index: number, people: Person[]): Person | undefin
     const re = new RegExp(`\\b${esc(p.nick)}\\b`, "giu");
     for (const m of s.matchAll(re)) if (m.index! < index && (!best || m.index! > best.at)) best = { p, at: m.index! };
   }
+  // A pronoun ("ella"/"él") closer to the adjective than any name points to the person who uses it.
+  for (const [re, g] of [[/\bella\b/giu, "f"], [/\bél\b/giu, "m"]] as const) {
+    const owners = people.filter((p) => p.pronoun === g);
+    if (owners.length !== 1) continue;
+    for (const m of s.matchAll(re)) if (m.index! < index && (!best || m.index! > best.at)) best = { p: owners[0], at: m.index! };
+  }
   return best?.p;
 }
 
