@@ -71,9 +71,11 @@ Bad (rejected):
 
 ## Pipeline
 
-1. The agent (gemini-2.5-flash) calls the Qloo tools and writes **3 candidates**, each with a different hook.
+1. The agent (gemini-2.5-flash) calls the Qloo tools and writes **3 candidates**, each with a different hook, guided by 3 rotating examples from the curated bank in `lib/agent/examples.ts` (examples about the couple's own tastes are excluded so it can't copy them).
 2. The sanitizer cleans each one (banned phrases, other percentages, slang tics, and any sentence
    matching the dark/violent filter: ventana, muerte, matar, sangre, golpe, armas, kill, die…).
-3. A judge (gemini-2.5-flash-lite) scores coherence, wordplay, funniness and safety. Candidates
-   with coherence < 3 or safety < 4 are dropped; the highest total wins.
-4. If the LLM is unavailable, a data-driven template roast is used.
+3. A judge (gemini-2.5-flash) answers pass/fail for: makes sense, real wordplay tied to a taste or
+   place, punchline at the end, no contradiction, safe; rates funny 1-5 and force-ranks. Any fail or
+   funny < 3 is rejected; if nothing passes, one regeneration; then the best-ranked sensible one.
+4. Gender check: pronouns chosen in the form; "solo/sola" fixed per person, "sin compañía" for neutral.
+5. If the LLM is unavailable, a data-driven template roast is used.

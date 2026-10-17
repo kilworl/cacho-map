@@ -63,7 +63,7 @@ docs/humor.md        humor research and the rules the prompt follows
 ## How Qloo is used
 
 1. **`/search`** and **`/v2/tags`**: each free-text taste (normalized by a small LLM: "Mentalista" → The Mentalist, "comida mexicana" → Mexican cuisine tag) → a Qloo entity or tag, in parallel.
-2. **`/v2/insights`** with `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)` and a radius around the user, personalized per person → each person's **top 20 places**. Specific titles drive this signal; broad media categories ("video games", "superheroes") are left out of the place call so they don't make everyone like the same arcades, while cuisine tags are kept (they're about places). People who only typed categories use their tags.
+2. **`/v2/insights`** with `filter.type=urn:entity:place`, `filter.location=POINT(lon lat)` and a radius around the user, called **once per input** (up to 6 per person). Each person's favorites are a blend of those lists (`lib/scoring/blend.ts`): rank score × weight, where titles weigh 1, cuisines 0.6 and broad categories 0.3, normalized and **capped at 40% per input**, so one cuisine can't take over. Four unrelated "probe" tastes (The Lion King, Beethoven, MasterChef, The Great Gatsby) give a **popular-for-anyone baseline** per city; places in 3 of 4 probe lists are left out of the comparison. Result: each person's **top 20 places**.
 3. **`/v2/insights/compare`**: shared taste tags, shown as a secondary "taste affinity" stat and given to the agent as joke material.
 4. Place tags (`genre:place`, `cuisine`, `ambience`, `activity_type`), `short_description` and `price_level` feed the zone profiles and place popups.
 5. The agent's tools (`getRisk`, `getSharedTasteTags`, `getZones`, `getPlaces`) expose only this Qloo-derived data, so the roast always cites real tastes and real places.
@@ -73,7 +73,7 @@ The compare call and both place calls run in parallel. Qloo calls retry on 429/5
 ## Scoring
 
 ```
-A = top 20 Qloo places for person 1, B = top 20 for person 2
+A = top 20 blended Qloo places for person 1, B = same for person 2 (popular-for-anyone places removed)
 risk  = round( ( |A \ B| / |A|  +  |B \ A| / |B| ) / 2 × 100 )
         "X% of the plans one likes, the other doesn't"
 level = bajo < 35 ≤ medio < 60 ≤ alto < 80 ≤ "ya hay cacho"
@@ -82,7 +82,9 @@ zone kind = danger if zone risk ≥ 50%, else safe (both would go)
 tag affinity (secondary) = rescale(mean Qloo tag score, 0.50 → 0, 0.73 → 100) × min(1, tags / 40)
 ```
 
-The roast may only quote the overall %. The agent writes 3 candidates; `gemini-2.5-flash-lite` scores coherence, wordplay, funniness and safety, drops anything incoherent or unsafe, and the best one is shown.
+The roast may only quote the overall %. The agent writes 3 candidates using 3 rotating few-shot examples from a curated bank (`lib/agent/examples.ts`, never ones about the couple's own tastes). A judge (`gemini-2.5-flash`, the strongest free-tier model) checks each one for makes-sense, real wordplay, punchline at the end, no contradiction and safety, rates funniness and force-ranks them. Anything failing a criterion or below 3/5 is rejected; if none passes, the agent regenerates once (time permitting).
+
+**Pronouns.** Each person picks él/ella/elle (he/she/they), neutral by default. They go into every prompt (roast, plan, zone and place copy), and `lib/agent/gender.ts` fixes "solo/sola" to the right form ("sin compañía" for neutral) and drops sentences with pronouns nobody uses.
 
 ## Run locally
 
