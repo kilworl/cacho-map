@@ -8,3 +8,7 @@ out
 *qloo*.json
 samples/
 index.ts
+shot*.png
+public/vendor/
+coverage/
+*.tsbuildinfo
