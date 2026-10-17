@@ -79,7 +79,8 @@ function facts(r: ScoreResult, ctx: Ctx) {
   const places = r.pins.slice(0, PLACES_TO_DESCRIBE).map((p) => ({
     id: p.id, name: p.name, for: p.who === "both" ? "both" : p.who === "a" ? ctx.a : ctx.b,
     types: p.tags?.genres ?? [p.genre], cuisines: p.tags?.cuisines ?? [], ambience: p.tags?.ambience ?? [], activities: p.tags?.activities ?? [],
-    qloo_description: p.description ?? null,
+    // Spanish copy is written from the tags: given Qloo's English description, the model tends to copy it.
+    qloo_description: ctx.lang === "en" ? p.description ?? null : null,
   }));
   return { zones, places };
 }
@@ -128,7 +129,7 @@ export async function describe(r: ScoreResult, ctx: Ctx, timeoutMs = 12_000): Pr
   // Language guard: anything the model wrote in the wrong language is replaced by the template.
   const clean = (s?: string, name?: string) => {
     // Drop "prices not specified"-style filler the model adds despite the prompt.
-    let t = s?.replace(/[!¡]/g, "").split(/(?<=[.])\s+/).filter((x) => !/no especificad|sin especificar|not specified|unspecified|no disponible|not available/i.test(x)).join(" ").trim();
+    let t = s?.replace(/[!¡]/g, "").split(/(?<=[.])\s+/).filter((x) => !/\b(no|not|sin)\b[^.]*\b(specified|especificad\w*|disponibles?|available|indicad\w*)\b|unspecified/i.test(x)).join(" ").trim();
     if (t && !inLang(t, ctx.lang)) return undefined;
     if (t && name && t.toLowerCase().startsWith(name.toLowerCase())) t = t.slice(name.length).replace(/^[\s:,.–-]+/, "");
     return t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : undefined;

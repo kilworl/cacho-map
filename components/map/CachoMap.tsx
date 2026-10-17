@@ -32,7 +32,8 @@ function popupHtml(p: Pin, labels: PinLabels): string {
   const meta = [p.typeLabel, p.zone].filter(Boolean).map((x) => esc(String(x))).join(" · ");
   const img = p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" />` : "";
   const rating = p.rating ? `<span class="pop-rating">★ ${p.rating.toFixed(1)}</span>` : "";
-  const summary = p.summary ? `<p class="pop-sum">${esc(p.summary)}</p>` : "";
+  // Skip a summary that only repeats the place type already shown above it.
+  const summary = p.summary && p.summary.toLowerCase() !== p.typeLabel?.toLowerCase() ? `<p class="pop-sum">${esc(p.summary)}</p>` : "";
   const plan = p.plan ? `<p class="pop-plan">${esc(p.plan)}</p>` : "";
   const why = p.why ? `<p class="pop-why">${esc(p.why)}</p>` : "";
   return `<div class="pop pop--${p.who}">${img}<div class="pop-body"><span class="pop-who">${esc(labels[p.who])}</span><strong>${esc(p.name)}</strong><small>${meta} ${rating}</small>${why}${summary}${plan}</div></div>`;
