@@ -43,8 +43,8 @@ export function fixSubjectComma(t: string): string {
 
 /** Vibes the data never backs ("romántico", "mágico", "perfect"): removed from plans and descriptions. */
 const OVERSTATED: Record<Lang, RegExp> = {
-  es: /(,\s*|\s+y\s+|\s+)(muy\s+|super\s+|súper\s+)?(romántic[oa]s?|mágic[oa]s?|perfect[oa]s?|inolvidables?|espectaculares?|increíbles?|ideal(es)?|paradisíac[oa]s?|encantador(a|es|as)?|idílic[oa]s?|tranquil[oa]s?)(?![\p{L}])/giu,
-  en: /(,\s*|\s+and\s+|\s+)(very\s+|super\s+)?(romantic|magical|perfect|unforgettable|amazing|stunning|breathtaking|charming|idyllic|ideal|dreamy|quiet|tranquil)(?![\p{L}])/giu,
+  es: /(,\s*|\s+y\s+|\s+)(muy\s+|super\s+|súper\s+)?(romántic[oa]s?|mágic[oa]s?|perfect[oa]s?|deliciosa?s?|inolvidables?|espectaculares?|increíbles?|ideal(es)?|paradisíac[oa]s?|encantador(a|es|as)?|idílic[oa]s?|tranquil[oa]s?)(?![\p{L}])/giu,
+  en: /(,\s*|\s+and\s+|\s+)(very\s+|super\s+)?(romantic|magical|perfect|unforgettable|amazing|delicious|stunning|breathtaking|charming|idyllic|ideal|dreamy|quiet|tranquil)(?![\p{L}])/giu,
 };
 export function tameAdjectives(t: string, lang: Lang): string {
   let out = t.replace(OVERSTATED[lang], "");
@@ -75,6 +75,8 @@ export function sanitizeRoast(r: Roast, pct: number, lang: Lang, worstZone?: str
     const tail = title.includes("·") ? title.split("·").slice(1).join("·").replace(/\d+\s?%/g, "").trim() : "";
     title = tail ? `${label} · ${tail}` : worstZone ? `${label} · ${worstZone}` : label;
   }
+  // No empty segments left over ("Cheating risk: 5% · Case closed · " after a stray % was removed).
+  title = title.replace(/(\s*·\s*)+(?=\s*·)/g, "").replace(/(\s*·\s*)+$/, "").trim();
   return { title, roast: cleanLine(r.roast, pct), plan: tameAdjectives(cleanLine(r.plan, pct), lang) };
 }
 

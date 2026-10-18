@@ -95,3 +95,9 @@ describe("v8 text fixes", () => {
     expect(tameAdjectives("Grab drinks at an amazing rooftop.", "en")).toBe("Grab drinks at a rooftop.");
   });
 });
+
+describe("title separators", () => {
+  it("drops a dangling '·' left after removing a stray percentage", () => {
+    expect(sanitizeRoast({ title: "Cheating risk: 5% · Case closed on cachos · 7%", roast: "x.", plan: "" }, 5, "en").title).toBe("Cheating risk: 5% · Case closed on cachos");
+  });
+});

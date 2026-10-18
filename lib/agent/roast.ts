@@ -123,7 +123,7 @@ function sentenceCaseTitle(title: string, lang: Lang, ctx: OwnershipCtx): string
   const [label, ...rest] = title.split(" · ");
   const known = new Set([ctx.a, ctx.b].flatMap((p) => [p.nick, ...p.tastes.flatMap((e) => [e.name, e.input]), ...(p.shown ?? [])]).concat(ctx.vocab).flatMap((x) => x.split(/\s+/)).map((w) => w.toLowerCase().replace(/['’]s$/, "")));
   const tail = rest.join(" · ").split(/\s+/).map((w, i) => (i === 0 || known.has(w.toLowerCase().replace(/['’]s$/, "").replace(/[^\p{L}\p{N}]/gu, "")) ? w : w.toLowerCase())).join(" ");
-  return `${label} · ${tail}`;
+  return tail.trim() ? `${label} · ${tail}`.replace(/(\s*·\s*)+$/, "") : label;
 }
 
 async function candidates(input: RoastInput, toolCalls: string[], useTools: boolean) {
