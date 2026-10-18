@@ -8,6 +8,17 @@ Live: **https://cacho-map.vercel.app** · Built for the Qloo Agentic Hackathon (
 
 ## Features
 
+### New in v9
+
+- **Live couple mode (two phones).** Person A opens a room and gets a link + QR code (WhatsApp share, copy). Each person types their own tastes on their own phone; neither sees the other's until both are in. Then both phones show the agent working and reveal the same result (polling `GET /api/live/[id]`; state in a private Vercel Blob store, compute runs with `after()`). The original one-phone mode is still the default tab.
+- **Rescue plan.** 2–3 real Qloo places near you that work for **both** people, as a short route (km per leg, numbered pins and a dashed line on the map). Each stop says which taste of each person it satisfies ("For Jesús: horror movies · For Karol: K-dramas"). Places come from two extra `/v2/insights` calls with both people's signals combined; the picker prefers stops that serve both, then alternates one per person. A small model only phrases "what to do there" from the place's own Qloo types and cuisines; every line is checked (language, length, no invented people/tastes) with a template fallback.
+- **Visible agent.** The pipeline streams its reasoning live (NDJSON): parse → *is there enough info?* → Qloo search → places → compare → score → zones → roast/judge → rescue, each step with the Qloo endpoint it called, timing and a one-line finding ("12 Qloo calls: 30 places for Jesús, 30 for Karol").
+- **The agent asks before guessing.** If one person's input is too thin (fewer than 2 tastes, or only food/outings, or only media with no places), the agent stops and asks a short follow-up with one-tap ideas (including the other person's tastes), then continues. It asks each person at most once; "keep going" skips it.
+- **Shareable cards.** `next/og` images for Instagram story (1080×1920), feed (1080×1350) and X/link previews (1200×630) with the %, the level, the best joke and a doodle map of the danger/safe zones. Share-image (Web Share API with files) and download buttons; `/r` and `/live/[id]` links carry proper OG/Twitter meta so the card shows up in WhatsApp/X.
+- **Stricter joke judge.** The judge must name the double meaning ("rolling = sushi roll / leaving"), confirm the pun is real in that language, and flag hedged punchlines ("…or maybe he's just…"); jokes that use both people's tastes rank higher, and different joke angles are rotated. Unfinished, hedged or unjudged jokes fall back to the safe template.
+
+### Core
+
 - **Works anywhere.** Uses the browser's location (reverse-geocoded with BigDataCloud's free client API) or a city picker; Cartagena is the default.
 - **Qloo at the core.** Entity search, taste comparison and location-aware place recommendations drive the score, the map and every joke.
 - **Zones for any city.** Neighborhoods come from Qloo place data, with nearest-neighbor and compass fallbacks (and a hand-made refinement for Cartagena).
@@ -17,46 +28,55 @@ Live: **https://cacho-map.vercel.app** · Built for the Qloo Agentic Hackathon (
 - **Explainable places and zones.** Every place records which of each person's tastes brought it (the blend keeps per-taste contributions). Popups say "Por esto: le sale a Jesús por su gusto por el anime"; zone cards say "Getsemaní: bares y cafés. Aquí le salen planes por los gustos de Karol (vallenato, BTS) y casi nada por los de Jesús (acción, anime) → Karol iría sin Jesús"; the % sentence and the "how is it calculated" panel break it down per taste.
 - **Live map.** OpenFreeMap vector tiles recolored to the app palette, animated pins, a heat layer showing the cheating risk per neighborhood, fly-to animations.
 - **ES / EN** across UI and AI output, saved in `localStorage`, defaulting to the browser language. Switching language with a result on screen regenerates it (AI copy is written in one language); every AI line passes a language guard with a template fallback, and a test checks both dictionaries have the same keys and read as the right language.
-- Shareable 4:5 card (`next/og`) and WhatsApp share.
+- WhatsApp share and short `/r` result links.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    UI[CachoApp<br/>React 19 + Next.js 16] --> GEO[lib/geo/locate<br/>Geolocation + BigDataCloud]
-    UI --> MAP[components/map/CachoMap<br/>MapLibre + OpenFreeMap]
+  subgraph Phones
+    A[Phone A / one-phone mode<br/>CachoApp] 
+    B[Phone B<br/>/live/id?p=b]
   end
-  UI -- POST /api/match --> API[app/api/match<br/>zod validation]
-  API --> SVC[lib/match/service<br/>runMatch]
-  SVC --> Q1[lib/qloo/api<br/>resolveTastes: /search]
-  SVC --> Q2[compareTastes:<br/>/v2/insights/compare]
-  SVC --> Q3[placesNear:<br/>/v2/insights type=place<br/>POINT + radius]
-  Q1 & Q2 & Q3 --> QC[lib/qloo/client<br/>retry + 24h cache]
-  SVC --> Z[lib/geo/zones<br/>assignZones]
-  Z --> S[lib/scoring/score<br/>pure functions]
-  S --> AG[lib/agent/roast<br/>agent: tools + 3 candidates]
-  AG --> J[judge<br/>flash-lite scores, drops nonsense]
-  S --> EN[lib/agent/enrich<br/>zone + place copy from Qloo facts]
-  AG & J & EN --> GW[(Vercel AI Gateway)]
-  AG --> SAN[lib/agent/sanitize<br/>humor contract + dark filter]
-  SVC --> API --> UI
-  UI --> CARD[app/api/card<br/>share image]
+  A -- "POST /api/match?stream=1 (NDJSON)" --> M[app/api/match]
+  A -- "POST /api/live" --> L[app/api/live]
+  A & B -- "POST/GET /api/live/[id] (poll)" --> LS[lib/live/session<br/>claim-once sides]
+  LS <--> BLOB[(Vercel Blob<br/>private)]
+  LS -- "after()" --> RUN
+  M --> RUN[lib/match/service · runMatch<br/>Tracer emits each step]
+  RUN --> P[parse tastes<br/>LLM + heuristic]
+  P --> C{clarify<br/>enough info?}
+  C -- no --> Q[follow-up question]
+  C -- yes --> S["Qloo /search + /v2/tags<br/>validated"]
+  S --> PL["Qloo /v2/insights<br/>places per taste, POINT+radius"]
+  S --> CMP["Qloo /v2/insights/compare"]
+  PL & CMP --> SC[lib/scoring<br/>pure · 5% floor]
+  SC --> Z[lib/geo/zones]
+  Z --> R[roast agent<br/>tools + angles]
+  R --> J[judge<br/>double meaning · hedge · both tastes]
+  Z --> RS["lib/rescue<br/>Qloo /v2/insights with A+B signals → pickStops → phrase"]
+  Z --> D[zone + place copy]
+  J & RS & D --> OUT[MatchResult + trace]
+  OUT --> CARD["app/api/card<br/>story · post · og (next/og)"]
 ```
 
 ```
-app/                 Next.js routes (page, /api/match, /api/card, /r share page)
-components/          UI: CachoApp, MatchForm, ResultView, ZoneList, LocationPicker, LoadingState…
-  map/               CachoMap (MapLibre) + mapTheme (basemap, palette, heat stops)
+app/                 routes: page, /api/match (JSON or NDJSON stream), /api/live, /api/live/[id],
+                     /api/card (story/post/og), /r share page, /live/[id] room
+components/          CachoApp, MatchForm, ResultView, AgentTrace, FollowUpCard, RescuePlan,
+                     ShareCard, LiveStart, LiveSession, QrCode, ZoneList, LocationPicker…
+  map/               CachoMap (MapLibre: pins, heat, rescue route) + mapTheme
   reactbits/         Animated components from React Bits (vendored verbatim)
 lib/
-  qloo/              HTTP client (retry, cache) and typed API helpers
+  qloo/              HTTP client (retry, cache) and typed API helpers (incl. placesForBoth)
   geo/               preset cities, distance, zone assignment, browser geolocation
   scoring/           pure scoring functions + vitest tests
-  agent/             prompt, tools, roast generation, output sanitizer, template fallback
-  match/             request schema (zod) and the runMatch orchestrator
+  agent/             prompt, tools, roast + judge, clarify (follow-up policy), trace, sanitizer
+  rescue/            pick (pure: scoring, route), phrase (checked LLM lines), buildRescue
+  live/              session state machine + JsonStore (Vercel Blob / memory)
+  card/              card params (encode/parse) + Satori layout
+  match/             request schemas (zod), runMatch orchestrator, NDJSON client
   i18n/              ES/EN dictionaries + LangProvider
-  text/              name normalization (ALL CAPS → Title Case)
 docs/humor.md        humor research and the rules the prompt follows
 ```
 
@@ -102,9 +122,10 @@ The roast may only quote the overall %. For a "pareja blindada" (≤ 10%) the pr
 
 ```bash
 cp .env.example .env.local   # add QLOO_API_KEY and, locally, AI_GATEWAY_API_KEY
+                             # optional: BLOB_READ_WRITE_TOKEN for live rooms (without it they use memory)
 npm install                  # also copies the MapLibre worker into public/vendor
 npm run dev
-npm test                     # vitest: risk scoring, zones, sanitizer, zone/place templates, judge
+npm test                     # vitest (133 tests): scoring, zones, sanitizer, judge, clarify, trace, rescue, cards, live sessions
 npm run lint && npm run typecheck
 ```
 

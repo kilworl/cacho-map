@@ -36,3 +36,19 @@ export function pickShots(tastes: string[], lang: Lang, n = 3, rand = Math.rando
   const shuffled = [...pool].sort(() => rand() - 0.5);
   return shuffled.slice(0, n).map((s) => `- (${s.hook}) "${lang === "es" ? s.es : s.en}"`);
 }
+
+/** Joke angles; each request gives its 3 candidates 3 different ones, so jokes don't repeat a formula. */
+export const ANGLES: { es: string; en: string }[] = [
+  { es: "choque: un gusto de A contra uno de B, y el cacho sale del choque", en: "clash: one of A's tastes against one of B's, and the cheating comes from the clash" },
+  { es: "coartada: un gusto de uno sirve de excusa perfecta para salir sin el otro", en: "alibi: one person's taste is the perfect excuse to go out without the other" },
+  { es: "título literal: el nombre de un gusto (serie, canción, artista) leído literal describe el cacho", en: "literal title: a taste's name (show, song, artist) read literally describes the cheating" },
+  { es: "doble vida: de día con su pareja, de noche con su gusto", en: "double life: by day with the partner, by night with the taste" },
+  { es: "el tercero en discordia no es una persona: es el gusto del otro", en: "the third wheel isn't a person: it's the other's taste" },
+  { es: "despecho: cómo reaccionaría cada uno según sus gustos si lo descubre", en: "heartbreak: how each would react, by their tastes, if they found out" },
+];
+
+export function pickAngles(lang: Lang, n = 3, rand = Math.random): string[] {
+  // The clash angle always goes first: it uses both people's tastes.
+  const [clash, ...rest] = ANGLES;
+  return [clash, ...[...rest].sort(() => rand() - 0.5)].slice(0, n).map((a) => a[lang]);
+}

@@ -1,14 +1,7 @@
 import type { MatchResult } from "./types";
+import { cardQuery } from "./card/params";
 
-/** Query string for the share card and /r page. Only nicknames, numbers and the roast are included. */
+/** Query string for the share card and /r page (see lib/card/params). */
 export function shareQuery(r: MatchResult): string {
-  return new URLSearchParams({
-    a: r.a,
-    b: r.b,
-    p: String(r.risk),
-    z: r.zones.find((z) => z.kind === "danger")?.zone ?? "",
-    c: r.city.name,
-    t: r.roast.roast.slice(0, 220),
-    l: r.lang,
-  }).toString();
+  return cardQuery(r);
 }

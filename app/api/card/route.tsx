@@ -1,6 +1,8 @@
 import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CARD_SIZES, isCardFormat, parseCard } from "@/lib/card/params";
+import { Card } from "@/lib/card/layout";
 
 // Bricolage Grotesque (SIL OFL), static weights for Satori.
 const fonts = Promise.all(
@@ -12,44 +14,16 @@ const fonts = Promise.all(
   })),
 );
 
-/** 1080x1350 share card (Instagram/WhatsApp friendly). Inputs are query params, truncated. */
+/**
+ * GET /api/card?f=story|post|og&…  Share card as PNG: Instagram story (1080x1920),
+ * feed post (1080x1350, default) or X / Open Graph (1200x630). Params: lib/card/params.
+ */
 export async function GET(req: Request) {
-  const u = new URL(req.url).searchParams;
-  const g = (k: string, n = 140) => (u.get(k) || "").slice(0, n);
-  const en = g("l", 2) === "en";
-  const zone = g("z", 30);
-  const city = g("c", 30);
-  return new ImageResponse(
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 64, background: "#f6ecd9", color: "#1a1410", fontFamily: "Bricolage", border: "18px solid #1a1410" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 46, fontWeight: 800, display: "flex" }}>CACHO·MAP</div>
-        <div style={{ fontSize: 30, display: "flex", background: "#1a1410", color: "#f6ecd9", padding: "8px 22px", borderRadius: 999 }}>{city || "📍"}</div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ fontSize: 58, fontWeight: 800, display: "flex", gap: 18 }}>
-          <span style={{ color: "#ff3b1f" }}>{g("a", 24)}</span>
-          <span>×</span>
-          <span style={{ color: "#2563ff" }}>{g("b", 24)}</span>
-        </div>
-        <div style={{ fontSize: 60, fontWeight: 800, display: "flex", marginTop: 20 }}>{en ? "Cheating risk" : "Riesgo de cacho"}</div>
-        <div style={{ fontSize: 300, fontWeight: 800, lineHeight: 0.9, display: "flex", color: "#ff3b1f", letterSpacing: -12 }}>{g("p", 3)}%</div>
-        <div style={{ fontSize: 30, display: "flex", marginTop: 8, fontWeight: 500 }}>
-          {en ? "of the plans one likes, the other doesn't" : "de los planes que le gustan a uno no le gustan al otro"}
-        </div>
-        {zone && (
-          <div style={{ display: "flex", marginTop: 22 }}>
-            <div style={{ fontSize: 34, display: "flex", background: "#ffc21a", border: "4px solid #1a1410", padding: "8px 20px", transform: "rotate(-2deg)" }}>
-              {en ? `Danger zone: ${zone}` : `Zona de peligro: ${zone}`}
-            </div>
-          </div>
-        )}
-        <div style={{ fontSize: 40, marginTop: 40, display: "flex", lineHeight: 1.25, fontWeight: 500 }}>“{g("t", 220)}”</div>
-      </div>
-      <div style={{ fontSize: 28, display: "flex", justifyContent: "space-between", opacity: 0.85 }}>
-        <span>{en ? "Only cheating on plans. It's a joke" : "Solo cachos de planes. Es un chiste"}</span>
-        <span>{en ? "Powered by Qloo taste AI" : "Gustos por la IA de Qloo"}</span>
-      </div>
-    </div>,
-    { width: 1080, height: 1350, fonts: await fonts },
-  );
+  const q = new URL(req.url).searchParams;
+  const f = isCardFormat(q.get("f")) ? (q.get("f") as keyof typeof CARD_SIZES) : "post";
+  const d = parseCard(q);
+  const res = new ImageResponse(<Card d={d} f={f} />, { ...CARD_SIZES[f], fonts: await fonts });
+  if (q.get("dl")) res.headers.set("content-disposition", `attachment; filename="cacho-map-${d.pct}-${f}.png"`);
+  res.headers.set("cache-control", "public, max-age=86400, immutable");
+  return res;
 }

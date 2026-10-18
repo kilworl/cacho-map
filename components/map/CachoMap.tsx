@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { GeoPoint, Pin, ZoneStat } from "@/lib/types";
+import type { GeoPoint, Pin, RescueStop, ZoneStat } from "@/lib/types";
 import { BASEMAP_URL, HEAT_STOPS, TINT } from "./mapTheme";
 
 // Fix for "Worker failed to load": serve MapLibre's worker as a static file (see scripts/copy-maplibre-worker.mjs).
@@ -24,6 +24,8 @@ interface Props {
   labels: PinLabels;
   /** Changing this flies the camera to the point. */
   focus?: (GeoPoint & { key: string }) | null;
+  /** Rescue plan: numbered stops joined by a dashed route from the couple's location. */
+  route?: RescueStop[];
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -50,7 +52,16 @@ function zonesGeoJSON(zones: ZoneStat[]): GeoJSON.FeatureCollection {
   };
 }
 
-export default function CachoMap({ label, center, pins, zones, labels, focus }: Props) {
+function routeGeoJSON(start: GeoPoint, stops: RescueStop[]): GeoJSON.FeatureCollection {
+  if (!stops.length) return { type: "FeatureCollection", features: [] };
+  return {
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[start.lon, start.lat], ...stops.map((s) => [s.lon, s.lat])] } }],
+  };
+}
+
+export default function CachoMap({ label, center, pins, zones, labels, focus, route = [] }: Props) {
+  const stopMarkers = useRef<Marker[]>([]);
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -93,6 +104,14 @@ export default function CachoMap({ label, center, pins, zones, labels, focus }: 
             "circle-blur": 0.7,
             "circle-opacity": 0.45,
           },
+        });
+        m.addSource("rescue", { type: "geojson", data: routeGeoJSON(center, []) });
+        m.addLayer({
+          id: "rescue-route",
+          type: "line",
+          source: "rescue",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#1a1410", "line-width": 3.5, "line-dasharray": [1.2, 1.6] },
         });
         m.addLayer({
           id: "zone-label",
@@ -149,6 +168,30 @@ export default function CachoMap({ label, center, pins, zones, labels, focus }: 
       cancelled = true;
     };
   }, [pins, zones, labels]);
+
+  // Rescue route: numbered stickers on top of the pins.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await ready.current;
+      const m = map.current;
+      if (!m || cancelled) return;
+      stopMarkers.current.forEach((mk) => mk.remove());
+      stopMarkers.current = [];
+      (m.getSource("rescue") as GeoJSONSource | undefined)?.setData(routeGeoJSON(center, route));
+      route.forEach((s, i) => {
+        const node = document.createElement("div");
+        node.className = "stop-marker";
+        node.style.setProperty("--delay", `${900 + i * 220}ms`);
+        node.innerHTML = `<span>${i + 1}</span>`;
+        node.title = s.name;
+        stopMarkers.current.push(new maplibregl.Marker({ element: node, anchor: "bottom" }).setLngLat([s.lon, s.lat]).addTo(m));
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [route, center]);
 
   // MapLibre's control tooltips are English by default; keep them in the UI language.
   useEffect(() => {

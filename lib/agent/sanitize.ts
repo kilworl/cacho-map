@@ -52,7 +52,6 @@ export function tameAdjectives(t: string, lang: Lang): string {
   return fixPunctuation(out);
 }
 
-const sentences = (t: string) => t.split(/(?<=[.!?…])\s+/).filter(Boolean);
 const capFirst = (t: string) => t.charAt(0).toLocaleUpperCase() + t.slice(1);
 
 /** Removes sentences that cite any percentage other than the overall one, or banned words. */
@@ -67,8 +66,12 @@ export function cleanLine(text: string, pct: number): string {
 }
 
 /** Enforces the output contract on whatever the LLM produced. */
+/** Control characters the model sometimes emits ("5% \b · …"). */
+export const stripControl = (t: string) => t.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+
 export function sanitizeRoast(r: Roast, pct: number, lang: Lang, worstZone?: string): Roast {
   const label = pctLabel(pct, lang);
+  r = { title: stripControl(r.title), roast: stripControl(r.roast), plan: stripControl(r.plan) };
   let title = fixPunctuation(r.title.normalize("NFC").replace(/[!¡]/g, "")).replace(/(\s*·\s*)+$/, "").replace(/[.…]+$/, "");
   if (DARK.test(title) || SEXUAL.test(title)) title = worstZone ? `${label} · ${worstZone}` : label;
   if (FORBIDDEN.test(title) || !title.startsWith(label) || /\d+\s?%.*\d+\s?%/.test(title)) {
@@ -100,3 +103,10 @@ export function inLang(text: string, lang: Lang): boolean {
   if (lang === "es") return es >= en && (!long || es > 0);
   return en > es || (!long && en === 0 && es === 0);
 }
+
+/**
+ * A punchline that hedges instead of landing ("maybe he's having sushi, or he's just
+ * rolling out"; "o simplemente se fue") is a non-joke: reject it before the judge.
+ */
+const HEDGE = /(?:^|[\s,;])(?:or|o)\s+(?:maybe\s+|tal vez\s+|quizás?\s+)?(?:(?:he|she|they|it)(?:['’]s|['’]re| is| are)?\s+|(?:él|ella|elle)\s+)?(?:just|simply|simplemente|solo\s+(?:está|se\s+fue))\b/iu;
+export const isHedged = (text: string): boolean => HEDGE.test(text);

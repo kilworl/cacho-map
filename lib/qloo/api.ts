@@ -326,3 +326,33 @@ export async function probeLists(at: GeoPoint): Promise<Place[][]> {
   const { found } = await resolveTastes(PROBES);
   return Promise.all(found.map((e) => placesNear({ entities: [e.id], tags: [] }, at).catch(() => [])));
 }
+
+/**
+ * Places Qloo ranks for BOTH profiles at once (rescue plan): one call filtered to the
+ * place kinds either person's tastes lead to, one general call, both near the couple.
+ */
+export async function placesForBoth(a: TasteEntity[], b: TasteEntity[], at: GeoPoint): Promise<Place[]> {
+  const signals: Signals = {
+    entities: [...toSignals(a.filter((e) => e.signal)).entities, ...toSignals(b.filter((e) => e.signal)).entities].slice(0, 12),
+    tags: [...toSignals(a.filter((e) => e.signal)).tags, ...toSignals(b.filter((e) => e.signal)).tags].slice(0, 12),
+  };
+  const kinds = [...new Set([...a, ...b].flatMap((e) => (e.places ?? []).filter(isPlaceKind)))] as PlaceKind[];
+  const typed = async () => {
+    if (!kinds.length) return [];
+    const tags = placeKindTags(kinds);
+    const wanted = new Set(tags);
+    const d = await qlooGet("/v2/insights", {
+      "filter.type": "urn:entity:place",
+      "filter.location": `POINT(${at.lon.toFixed(4)} ${at.lat.toFixed(4)})`,
+      "filter.location.radius": 12_000,
+      "filter.tags": tags.join(","),
+      ...signalParams(signals),
+      take: 40,
+    });
+    return entitiesOf(d).map((x) => toPlace(x, wanted)).filter((p): p is Place => !!p);
+  };
+  const general = async () => (signals.entities.length + signals.tags.length ? placesNear(signals, at, 9000) : []);
+  const [t, g] = await Promise.all([typed().catch(() => []), general().catch(() => [])]);
+  const seen = new Set<string>();
+  return [...t, ...g].filter((p) => !seen.has(p.id) && (seen.add(p.id), true));
+}

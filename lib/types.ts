@@ -250,4 +250,58 @@ export interface MatchResult extends ScoreResult {
   /** Whether the LLM or the heuristic split the free text into tastes. */
   parsedBy?: "llm" | "heuristic";
   timings: Record<string, number>;
+  /** Date plan for 2-3 real places that suit both of them (lib/rescue). */
+  rescue?: RescuePlan;
+  /** The agent's visible reasoning: every step it took and which Qloo tool it used (lib/agent/trace). */
+  trace?: AgentStep[];
+}
+
+/** One stop of the rescue date: a real Qloo place, and which taste of each person it satisfies. */
+export interface RescueStop extends GeoPoint {
+  id: string;
+  name: string;
+  zone?: string;
+  genre?: string;
+  /** Indices into tastesA / tastesB this place satisfies (empty = not this person's pick). */
+  forA: number[];
+  forB: number[];
+  /** km from the previous stop (or from the user's location for the first one). */
+  km: number;
+  /** What to do there, one line in the result language (LLM, checked; else template). */
+  line?: string;
+}
+
+export interface RescuePlan {
+  title: string;
+  stops: RescueStop[];
+  /** "llm" when the lines were written by the model, "template" otherwise. */
+  source: "llm" | "template";
+}
+
+/** Ids of the agent's steps, in pipeline order. */
+export type StepId = "parse" | "clarify" | "search" | "places" | "compare" | "score" | "zones" | "roast" | "rescue";
+
+/**
+ * One visible step of the agent. `data` holds plain facts (names, counts) that the UI
+ * renders in its own language, so the trace is fully translated.
+ */
+export interface AgentStep {
+  id: StepId;
+  status: "running" | "done" | "skipped";
+  /** The tool behind the step ("Qloo /v2/insights", "LLM"). */
+  tool?: string;
+  ms?: number;
+  data?: Record<string, string | number | string[]>;
+}
+
+/** A short question the agent asks before computing, when one person's input is too thin. */
+export interface FollowUp {
+  who: "a" | "b";
+  nick: string;
+  /** few: fewer than 2 tastes; media: no music/shows/movies; places: no food or outings. */
+  reason: "few" | "media" | "places";
+  /** What we already understood for that person (labels in both languages). */
+  have: TasteLabel[];
+  /** The other person's tastes, offered as one-tap answers. */
+  fromOther: TasteLabel[];
 }

@@ -5,11 +5,11 @@ import { buildTools, toolSnapshot } from "./tools";
 import { checkJoke, checkReferences, fold, type OwnershipCtx } from "./ownership";
 import type { TasteEntity } from "../types";
 import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
-import { cleanLine, inLang, sanitizeRoast, tameAdjectives } from "./sanitize";
+import { cleanLine, inLang, isHedged, sanitizeRoast, tameAdjectives } from "./sanitize";
 import { judgeModelId, modelId } from "./model";
 import { fallbackRoast, sharedPairs } from "./fallback";
 import { fixGender, type Person } from "./gender";
-import { pickShots } from "./examples";
+import { pickAngles, pickShots } from "./examples";
 
 const Candidate = z.object({
   title: z.string().describe("Starts with the risk label, then ' · ' and a punchline of max 6 words"),
@@ -24,6 +24,10 @@ const Verdict = z.object({
   facts_cited: z
     .array(z.object({ fact: z.string(), attributed_to: z.string(), true_owner: z.string(), correct: z.boolean() }))
     .describe("Every taste, work, song, place or trait the title+joke cites, who the joke credits it to, who really has it"),
+  double_meaning: z.string().describe("The pun's two meanings as 'phrase: meaning 1 (the taste) / meaning 2 (cheating or going out without the partner)'. Empty if there is no such phrase"),
+  pun_is_real: z.boolean().describe("The phrase really carries BOTH meanings in everyday language; a word that only sounds related (rolling sushi -> 'rolling out') is false"),
+  hedged: z.boolean().describe("The punchline hedges or trails off ('maybe X, or just Y', 'o simplemente…') instead of landing one twist"),
+  uses_both_tastes: z.boolean().describe("It contrasts a taste of EACH person"),
   makes_sense: z.boolean(),
   wordplay: z.boolean(),
   punchline_at_end: z.boolean(),
@@ -72,8 +76,12 @@ const REGEN_BUDGET_MS = 14_000;
 
 /** A candidate passes only if it meets every criterion and is at least mildly funny. */
 export function passes(v?: Verdict): boolean {
-  return !!v && (v.facts_cited ?? []).every((f) => f.correct) && v.makes_sense && v.wordplay && v.punchline_at_end && v.no_contradiction && v.safe && v.funny >= MIN_FUNNY;
+  return !!v && (v.facts_cited ?? []).every((f) => f.correct) && v.makes_sense && v.wordplay && v.pun_is_real && !v.hedged && !!v.double_meaning?.includes("/")
+    && v.punchline_at_end && v.no_contradiction && v.safe && v.funny >= MIN_FUNNY;
 }
+
+/** Ranking bonus for jokes that play both people's tastes against each other (variety). */
+export const BOTH_TASTES_BONUS = 5;
 
 /** Ranking position (lower is better) used to break ties between passing candidates. */
 export function pickBest<T>(cands: T[], verdicts: Verdict[] | null, ranking: number[] | null): { best: T | null; totals: number[] } {
@@ -82,7 +90,7 @@ export function pickBest<T>(cands: T[], verdicts: Verdict[] | null, ranking: num
     if (!verdicts) return 0;
     if (!passes(v)) return -1;
     const pos = ranking?.indexOf(i) ?? -1;
-    return v!.funny * 10 + (pos < 0 ? 0 : cands.length - pos);
+    return v!.funny * 10 + (v!.uses_both_tastes ? BOTH_TASTES_BONUS : 0) + (pos < 0 ? 0 : cands.length - pos);
   });
   const order = totals.map((t, i) => [t, i] as const).sort((x, y) => y[0] - x[0]);
   if (!verdicts) return { best: cands[0] ?? null, totals };
@@ -133,7 +141,7 @@ async function candidates(input: RoastInput, toolCalls: string[], useTools: bool
     model: modelId(),
     ...(useTools ? { tools: buildTools(score, a.nick, b.nick), stopWhen: isStepCount(4) } : {}),
     output: Output.object({ schema: RoastSchema }),
-    system: systemPrompt(score.risk, lang, city, pickShots([...tastesA, ...tastesB], lang)).replace(/^(Primero llama tus herramientas|First call your tools).*$/m, useTools ? "$&" : "") + data,
+    system: systemPrompt(score.risk, lang, city, pickShots([...tastesA, ...tastesB], lang), score.level === "armored" ? [] : pickAngles(lang)).replace(/^(Primero llama tus herramientas|First call your tools).*$/m, useTools ? "$&" : "") + data,
     prompt: userPrompt(a, b, tastesA, tastesB, lang, sharedPairs(input.entitiesA, tastesA, tastesB)),
     temperature: 1,
     abortSignal: signal,
@@ -152,6 +160,14 @@ async function candidates(input: RoastInput, toolCalls: string[], useTools: bool
     .filter((c) => {
       if (c.roast.split(/\s+/).length < 6 || !inLang(c.roast, lang)) {
         rejected.push({ ...c, total: -2, dropped: true, reason: "too short, wrong language or filtered" });
+        return false;
+      }
+      if (!/[.?…"”»')]$/.test(c.roast.trim())) {
+        rejected.push({ ...c, total: -2, dropped: true, reason: "unfinished sentence" });
+        return false;
+      }
+      if (isHedged(c.roast)) {
+        rejected.push({ ...c, total: -2, dropped: true, reason: "hedged punchline ('or just…')" });
         return false;
       }
       const chk = checkJoke(c.title, c.roast, own);
@@ -178,6 +194,7 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
   const judged: Judged[] = [];
   let plan = "";
   let best: { title: string; roast: string } | null = null;
+  let judgedOnce = false;
   for (let round = 0; round < 2 && !best; round++) {
     if (round === 1 && Date.now() - t0 > REGEN_BUDGET_MS) break;
     // Round 2 skips the tool round-trip (same Qloo data inlined) to stay within the time budget.
@@ -191,6 +208,9 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
       return tail ? `Title: "${tail}" | Joke: ${c.roast}` : c.roast;
     });
     const j = await judge(lang, forJudge, context, input.signal);
+    // The judge already turned down round 1; unjudged round-2 jokes would skip the check: use the safe template.
+    if (!j && judgedOnce) break;
+    judgedOnce ||= !!j;
     // Real places and the city never have an owner; don't let the judge fail them.
     const known = new Set(ownershipCtx(input).vocab.map(fold));
     for (const v of j?.verdicts ?? [])
@@ -201,7 +221,8 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
     r.cands.forEach((c, i) => {
       const v = j?.verdicts.find((x) => x.index === i);
       const wrong = v?.facts_cited?.find((f) => !f.correct);
-      const reason = !v ? undefined : wrong ? `judge: ${wrong.fact} is ${wrong.true_owner}'s, not ${wrong.attributed_to}'s` : passes(v) ? undefined : `judge: ${Object.entries(v).filter(([k, x]) => x === false && k !== "index").map(([k]) => k).join(", ") || `funny ${v.funny}`}`;
+      const fails = !v ? [] : [...Object.entries(v).filter(([k, x]) => x === false && k !== "index" && k !== "uses_both_tastes" && k !== "hedged").map(([k]) => k), ...(v.hedged ? ["hedged"] : []), ...(v.double_meaning?.includes("/") ? [] : ["no double meaning"])];
+      const reason = !v ? undefined : wrong ? `judge: ${wrong.fact} is ${wrong.true_owner}'s, not ${wrong.attributed_to}'s` : passes(v) ? undefined : `judge: ${fails.join(", ") || `funny ${v.funny}`}`;
       judged.push({ title: c.title, roast: c.roast, total: pick.totals[i], dropped: pick.totals[i] < 0, reason });
     });
     best = pick.best;

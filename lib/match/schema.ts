@@ -20,5 +20,22 @@ export const MatchRequest = z.object({
     lat: z.number().min(-90).max(90),
     lon: z.number().min(-180).max(180),
   }),
+  /** false = never ask a follow-up question (compute with what there is). */
+  ask: z.boolean().default(true),
+  /** Sides already asked once (the agent never asks the same person twice). */
+  asked: z.array(z.enum(["a", "b"])).max(2).default([]),
 });
 export type MatchRequest = z.infer<typeof MatchRequest>;
+
+/** Body of POST /api/live (create a room). */
+export const LiveCreate = z.object({ lang: MatchRequest.shape.lang, city: MatchRequest.shape.city });
+
+/** Body of POST /api/live/[id] (one person sends their own tastes). */
+export const LiveSubmit = z.object({
+  consent: z.literal(true),
+  side: z.enum(["a", "b"]),
+  nick,
+  pronoun,
+  tastes,
+  asked: z.boolean().default(false),
+});

@@ -1,10 +1,11 @@
 "use client";
 import CountUp from "./reactbits/CountUp";
 import ShinyText from "./reactbits/ShinyText";
-import TiltedCard from "./reactbits/TiltedCard";
 import { ZoneList } from "./ZoneList";
-import { ShareActions } from "./ShareActions";
-import type { MatchResult, ZoneStat } from "@/lib/types";
+import { ShareCard } from "./ShareCard";
+import { RescuePlan } from "./RescuePlan";
+import { AgentTrace } from "./AgentTrace";
+import type { GeoPoint, MatchResult, ZoneStat } from "@/lib/types";
 import { shareQuery } from "@/lib/share";
 import { useI18n } from "@/lib/i18n/LangProvider";
 import { WHO_COLOR } from "./map/mapTheme";
@@ -14,13 +15,17 @@ import { isPlaceKind, placeKindLabel } from "@/lib/places/catalog";
 interface Props {
   r: MatchResult;
   onZone: (z: ZoneStat) => void;
+  onFocus: (p: GeoPoint) => void;
   onReset: () => void;
+  /** Link to share (live rooms share the room); defaults to the /r card page. */
+  link?: string;
+  resetLabel?: string;
 }
 
-export function ResultView({ r, onZone, onReset }: Props) {
+export function ResultView({ r, onZone, onFocus, onReset, link, resetLabel }: Props) {
   const { t, lang } = useI18n();
   const q = shareQuery(r);
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/r?${q}` : "";
+  const shareUrl = link ?? (typeof window !== "undefined" ? `${window.location.origin}/r?${q}` : "");
   const [label, ...rest] = r.roast.title.split(" · ");
   return (
     <article className="result">
@@ -61,14 +66,11 @@ export function ResultView({ r, onZone, onReset }: Props) {
 
       <div className="stats">
         <span><b>{r.shared}</b> {t.placesStat}</span>
-        <span><b>{r.tagScore}%</b> {t.tagsStat}</span>
+        {r.tagScore > 0 && <span><b>{r.tagScore}%</b> {t.tagsStat}</span>}
         <a className="see-map" href="#map">{t.seeMap}</a>
       </div>
 
-      <div className="plan">
-        <span className="sticker">{t.planTitle}</span>
-        <p>{r.roast.plan}</p>
-      </div>
+      <RescuePlan r={r} onFocus={onFocus} />
 
       <Understood r={r} />
 
@@ -80,27 +82,12 @@ export function ResultView({ r, onZone, onReset }: Props) {
         <span><i style={{ background: WHO_COLOR.b }} />{t.legendOnly(r.b)}</span>
       </div>
 
-      <div className="card-wrap">
-        <TiltedCard
-          imageSrc={`/api/card?${q}`}
-          altText={r.roast.title}
-          containerHeight="420px"
-          containerWidth="100%"
-          imageWidth="320px"
-          imageHeight="400px"
-          rotateAmplitude={10}
-          scaleOnHover={1.03}
-          showTooltip={false}
-          gyroscope={false}
-          glare={0.35}
-          radius={18}
-        />
-      </div>
+      <ShareCard query={q} url={shareUrl} text={t.shareText(r.risk, t.levels[r.level])} alt={r.roast.title} />
 
-      <ShareActions url={shareUrl} text={`${r.roast.title} 🦌`} />
+      {r.trace && r.trace.length > 0 && <AgentTrace steps={r.trace} nicks={{ a: r.a, b: r.b }} />}
 
       {r.agent === "fallback" && <p className="fine">{t.agentFallback}</p>}
-      <button type="button" className="btn btn--ghost" onClick={onReset}>{t.again}</button>
+      <button type="button" className="btn btn--ghost" onClick={onReset}>{resetLabel ?? t.again}</button>
     </article>
   );
 }
