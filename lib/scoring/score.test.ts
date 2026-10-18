@@ -23,7 +23,7 @@ describe("cheatingRisk", () => {
     expect(cheatingRisk(["a"], ["b"]).risk).toBe(100);
   });
   it("levels", () => {
-    expect([10, 40, 70, 90].map(riskLevel)).toEqual(["low", "medium", "high", "cheating"]);
+    expect([5, 10, 11, 40, 70, 90].map(riskLevel)).toEqual(["armored", "armored", "low", "medium", "high", "cheating"]);
   });
 });
 
@@ -48,7 +48,8 @@ describe("buildPins / zoneStats", () => {
 
 describe("score", () => {
   it("risk matches its definition", () => {
-    expect(score([], [place("a", "Z")], [place("a", "Z")])).toMatchObject({ risk: 0, level: "low", shared: 1 });
+    // Identical lists: raw risk 0, shown as the 5% floor ("nobody is 100% safe").
+    expect(score([], [place("a", "Z")], [place("a", "Z")])).toMatchObject({ risk: 5, rawRisk: 0, level: "armored", shared: 1 });
     const r = score([], [place("a", "Z")], [place("b", "Z")]);
     expect(r).toMatchObject({ risk: 100, level: "cheating", onlyA: 1, onlyB: 1 });
     expect(r.zones[0]).toMatchObject({ zone: "Z", riskPct: 100 });

@@ -40,7 +40,13 @@ export function cheatingRisk(a: string[], b: string[]): { risk: number; onlyA: n
   return { risk: Math.round(risk), onlyA, onlyB, shared };
 }
 
+/** Nobody is 100% safe: the shown risk never goes below this. */
+export const RISK_FLOOR = 5;
+/** At or below this, the couple is "blindada" (armored). */
+export const ARMORED_MAX = 10;
+
 export function riskLevel(risk: number): RiskLevel {
+  if (risk <= ARMORED_MAX) return "armored";
   if (risk < 35) return "low";
   if (risk < 60) return "medium";
   if (risk < 80) return "high";
@@ -163,11 +169,13 @@ export function score(tags: SharedTag[], placesA: ZonedPlace[], placesB: ZonedPl
     tasteRisk = Math.round((1 - sim) * 100);
   }
   const pr = Math.round(placeRisk);
-  const risk = tasteRisk == null ? pr : Math.round((tasteRisk + pr) / 2);
+  const rawRisk = tasteRisk == null ? pr : Math.round((tasteRisk + pr) / 2);
+  const risk = Math.max(RISK_FLOOR, rawRisk);
   const all = [...pins.values()];
   return {
     risk,
     level: riskLevel(risk),
+    rawRisk,
     onlyA: ta.length - sharedA,
     onlyB: tb.length - sharedB,
     totalA: ta.length,

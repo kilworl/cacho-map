@@ -196,7 +196,7 @@ export interface ZoneStat extends GeoPoint {
   byB?: [number, number][];
 }
 
-export type RiskLevel = "low" | "medium" | "high" | "cheating";
+export type RiskLevel = "armored" | "low" | "medium" | "high" | "cheating";
 
 export interface ScoreResult {
   /** Cheating risk: average of taste difference (tasteRisk) and separate plans (placeRisk); see lib/scoring/score.ts. */
@@ -210,6 +210,8 @@ export interface ScoreResult {
   shared: number;
   /** Secondary: Qloo taste-tag affinity (0-100). */
   tagScore: number;
+  /** Risk before the 5% floor (shown risk = max(5, rawRisk)). */
+  rawRisk?: number;
   /** Risk parts (0-100): taste difference and share of plans the other wouldn't share. risk = average. */
   tasteRisk?: number;
   placeRisk?: number;

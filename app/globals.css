@@ -151,6 +151,7 @@ button.chip:hover { background: var(--yellow); }
 .risk-bar span { position: absolute; inset: 0 auto 0 0; background: transparent; border-right: 4px solid var(--ink); transform-origin: left; animation: grow 1.4s cubic-bezier(.2,.9,.3,1) both; }
 .risk-bar i { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(26,20,16,.35); }
 .risk-level { align-self: flex-start; font-weight: 800; font-size: 0.95rem; border: 2px solid var(--ink); border-radius: 99px; padding: 3px 12px; background: var(--paper-2); box-shadow: 3px 3px 0 var(--ink); }
+.risk--armored .risk-level { background: var(--green); box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--green); }
 .risk--low .risk-level { background: var(--green); }
 .risk--medium .risk-level { background: var(--yellow); }
 .risk--high .risk-level { background: #ff8a3d; }

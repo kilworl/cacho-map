@@ -86,7 +86,7 @@ export function calc(r: MatchResult, lang: Lang): Calc {
     a: r.a, b: r.b, risk: r.risk, totalA: r.totalA, onlyA: r.onlyA, totalB: r.totalB, onlyB: r.onlyB,
     whyA: r.onlyA ? solo("a") : "", whyB: r.onlyB ? solo("b") : "",
     sharedTastes: pairs.slice(0, 3).join(", "),
-    tasteRisk: r.tasteRisk, placeRisk: r.placeRisk,
+    tasteRisk: r.tasteRisk, placeRisk: r.placeRisk, rawRisk: r.rawRisk,
     nA: r.tastesA.length, nB: r.tastesB.length, pairedA: r.pairedA ?? 0, pairedB: r.pairedB ?? 0,
     tags: r.topTags.length > 0, deep: DEEP_PLACES,
   };

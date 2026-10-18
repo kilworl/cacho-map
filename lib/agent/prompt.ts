@@ -64,19 +64,22 @@ Also "plan": one sentence (max 22 words) with a concrete plan at a place both li
 Everything in English.`;
 }
 
-export function userPrompt(a: Person, b: Person, tastesA: string[], tastesB: string[], lang: Lang): string {
+export function userPrompt(a: Person, b: Person, tastesA: string[], tastesB: string[], lang: Lang, shared: [string, string][] = []): string {
+  const both = shared.map(([x, y]) => (x.toLowerCase() === y.toLowerCase() ? x : `${x} / ${y}`)).join(", ");
   return lang === "es"
-    ? `Persona A: ${pronounHint(a, lang)}. Le gusta: ${tastesA.join(", ")}.\nPersona B: ${pronounHint(b, lang)}. Le gusta: ${tastesB.join(", ")}.`
-    : `Person A: ${pronounHint(a, lang)}. Likes: ${tastesA.join(", ")}.\nPerson B: ${pronounHint(b, lang)}. Likes: ${tastesB.join(", ")}.`;
+    ? `Persona A: ${pronounHint(a, lang)}. Le gusta: ${tastesA.join(", ")}.\nPersona B: ${pronounHint(b, lang)}. Le gusta: ${tastesB.join(", ")}.${both ? `\nGustos que comparten (de los dos): ${both}.` : ""}`
+    : `Person A: ${pronounHint(a, lang)}. Likes: ${tastesA.join(", ")}.\nPerson B: ${pronounHint(b, lang)}. Likes: ${tastesB.join(", ")}.${both ? `\nTastes they share (both): ${both}.` : ""}`;
 }
 
 function levelHint(pct: number, lang: Lang): string {
   if (lang === "es") {
+    if (pct <= 10) return `PAREJA BLINDADA (${pct}%): comparten casi todos sus gustos. El chiste va por "ni el cacho los separa": usa un gusto que comparten (dicho como de LOS DOS, ej. "a los dos les gusta la salsa") para mostrar que ni el cacho tiene chance con ellos. Nada de insinuar infidelidad real. El título puede jugar con "Ni el cacho los separa".`;
     if (pct < 35) return `riesgo BAJO (${pct}%): casi siempre salen juntos; el chiste es que el cacho es poco probable o sería con algo inofensivo.`;
     if (pct < 60) return `riesgo MEDIO (${pct}%): algunos planes cada uno por su lado.`;
     if (pct < 80) return `riesgo ALTO (${pct}%): la mayoría de planes los haría cada uno por separado.`;
     return `riesgo MÁXIMO (${pct}%): "ya hay cacho", casi nada en común.`;
   }
+  if (pct <= 10) return `ARMORED COUPLE (${pct}%): they share almost all their tastes. The joke is "not even a cacho can split them": use a taste they SHARE (said as BOTH of theirs, e.g. "they both love salsa") to show not even cheating stands a chance. Don't imply real cheating. The title can play on "Not even a cacho can split them".`;
   if (pct < 35) return `LOW risk (${pct}%): they almost always go out together; the joke is that cheating is unlikely or would be with something harmless.`;
   if (pct < 60) return `MEDIUM risk (${pct}%): some plans each on their own.`;
   if (pct < 80) return `HIGH risk (${pct}%): most plans they'd do separately.`;

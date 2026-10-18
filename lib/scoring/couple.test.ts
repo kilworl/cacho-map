@@ -54,6 +54,9 @@ describe("similar couple (Lina x Mateo)", () => {
     };
     const r = run(lina, mateo, lists);
     expect(r.risk).toBeLessThan(35);
+    // A perfect match shows the 5% floor and the "pareja blindada" level.
+    expect(r.risk).toBeGreaterThanOrEqual(5);
+    if (r.rawRisk! <= 10) expect(r.level).toBe("armored");
     expect(r.pairedA).toBe(4);
     expect(r.pairedB).toBe(4); // ceviche + mariscos folded into one
   });

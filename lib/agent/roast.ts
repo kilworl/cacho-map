@@ -7,7 +7,7 @@ import type { TasteEntity } from "../types";
 import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
 import { cleanLine, inLang, sanitizeRoast, tameAdjectives } from "./sanitize";
 import { judgeModelId, modelId } from "./model";
-import { fallbackRoast } from "./fallback";
+import { fallbackRoast, sharedPairs } from "./fallback";
 import { fixGender, type Person } from "./gender";
 import { pickShots } from "./examples";
 
@@ -134,7 +134,7 @@ async function candidates(input: RoastInput, toolCalls: string[], useTools: bool
     ...(useTools ? { tools: buildTools(score, a.nick, b.nick), stopWhen: isStepCount(4) } : {}),
     output: Output.object({ schema: RoastSchema }),
     system: systemPrompt(score.risk, lang, city, pickShots([...tastesA, ...tastesB], lang)).replace(/^(Primero llama tus herramientas|First call your tools).*$/m, useTools ? "$&" : "") + data,
-    prompt: userPrompt(a, b, tastesA, tastesB, lang),
+    prompt: userPrompt(a, b, tastesA, tastesB, lang, sharedPairs(input.entitiesA, tastesA, tastesB)),
     temperature: 1,
     abortSignal: signal,
     providerOptions: { google: { thinkingConfig: { thinkingBudget: 512 } } },
@@ -172,7 +172,8 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
   const toolCalls: string[] = [];
   const pron = (p: Person) => (p.pronoun === "m" ? "he" : p.pronoun === "f" ? "she" : "they");
   const owns = (p: Person, es: TasteEntity[], shown: string[]) => `${p.nick} (${pron(p)}) — ONLY ${p.nick}'s tastes: ${es.map((e, i) => `${shown[i] ?? e.name} [${e.type === "tag" ? "category" : e.type}]`).join("; ")}`;
-  const context = `${owns(a, entitiesA, tastesA)}. ${owns(b, entitiesB, tastesB)}. Real places: ${score.pins.slice(0, 12).map((p) => p.name).join(", ")}. No songs, albums or characters are verified for these tastes: citing any is a fact error.`;
+  const shared = sharedPairs(entitiesA, tastesA, tastesB);
+  const context = `${owns(a, entitiesA, tastesA)}. ${owns(b, entitiesB, tastesB)}. Real places: ${score.pins.slice(0, 12).map((p) => p.name).join(", ")}. No songs, albums or characters are verified for these tastes: citing any is a fact error.${shared.length ? ` Shared tastes (BOTH own these, citing them as both's is correct): ${shared.map(([x, y]) => (x === y ? x : `${x} (${a.nick}) / ${y} (${b.nick})`)).join("; ")}.` : ""}`;
 
   const judged: Judged[] = [];
   let plan = "";
@@ -205,7 +206,7 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
     });
     best = pick.best;
   }
-  const safe = fallbackRoast(a, b, score, lang, tastesA, tastesB);
+  const safe = fallbackRoast(a, b, score, lang, tastesA, tastesB, shared);
   const own = ownershipCtx(input);
   const cleanPlan = fixGender(tameAdjectives(cleanLine(plan, score.risk), lang), [a, b], lang);
   const planOk = cleanPlan && inLang(cleanPlan, lang) && checkJoke("", cleanPlan, own).ok && checkReferences(cleanPlan, own).ok;

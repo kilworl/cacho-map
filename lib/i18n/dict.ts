@@ -9,18 +9,22 @@ export interface Calc {
   /** Tastes behind each person's solo plans. */
   whyA: string; whyB: string;
   tasteRisk?: number; placeRisk?: number;
+  /** Risk before the 5% floor. */
+  rawRisk?: number;
   nA: number; nB: number; pairedA: number; pairedB: number;
   /** Did Qloo's tag affinity count (needs Qloo signals on both sides)? */
   tags: boolean;
   deep: number;
 }
+const raw = (c: Calc) => c.rawRisk ?? c.risk;
+const floored = (c: Calc) => c.rawRisk != null && c.rawRisk < c.risk;
 const pct = (n: number, d: number) => Math.round((n / Math.max(1, d)) * 100);
 const plansEs = (c: Calc) =>
   `de los ${c.totalA} planes que Qloo le encuentra a ${c.a}, ${c.onlyA} no los compartiría ${c.b}${c.whyA ? ` (sobre todo por ${c.whyA})` : ""}; de los ${c.totalB} de ${c.b}, ${c.onlyB} no los compartiría ${c.a}${c.whyB ? ` (sobre todo por ${c.whyB})` : ""}. ${c.onlyA + c.onlyB ? "Esos son los planes que uno haría sin el otro… o con otra compañía." : "Todo lo harían juntos."}`;
 const plansEn = (c: Calc) =>
   `of the ${c.totalA} plans Qloo finds for ${c.a}, ${c.onlyA} wouldn't be shared by ${c.b}${c.whyA ? ` (mostly because of ${c.whyA})` : ""}; of ${c.b}'s ${c.totalB}, ${c.onlyB} wouldn't be shared by ${c.a}${c.whyB ? ` (mostly because of ${c.whyB})` : ""}. ${c.onlyA + c.onlyB ? "Those are the plans one would do without the other… or with other company." : "You'd do it all together."}`;
-const pctPlansEs = (c: Calc) => `${c.risk}% sale así: ${plansEs(c)}`;
-const pctPlansEn = (c: Calc) => `Here's the ${c.risk}%: ${plansEn(c)}`;
+const pctPlansEs = (c: Calc) => `${floored(c) ? `El ${c.risk}% es el mínimo: en Cacho-Map nadie está 100% a salvo. Sin ese mínimo sería ${raw(c)}%: ` : `${c.risk}% sale así: `}${plansEs(c)}`;
+const pctPlansEn = (c: Calc) => `${floored(c) ? `${c.risk}% is the minimum: on Cacho-Map nobody is 100% safe. Without it, it would be ${raw(c)}%: ` : `Here's the ${c.risk}%: `}${plansEn(c)}`;
 
 const es = {
   heroTitle: ["¿Cuál es su riesgo de ", "cacho", "?"],
@@ -49,7 +53,7 @@ const es = {
   locDenied: "Sin permiso de ubicación, escoge tu ciudad.",
   nearYou: "cerca de ti",
   cachos: "Riesgo de cacho",
-  levels: { low: "Bajo: salen juntos casi siempre", medium: "Medio: ojo con los sábados", high: "Alto: cada uno por su lado", cheating: "Ya hay cacho (de planes)" },
+  levels: { armored: "Pareja blindada: ni el cacho los separa", low: "Bajo: salen juntos casi siempre", medium: "Medio: ojo con los sábados", high: "Alto: cada uno por su lado", cheating: "Ya hay cacho (de planes)" },
   howCalcTitle: "¿Cómo se calcula?",
   howCalc: (c: Calc) => [
     `Cada gusto trae su propia lista de Qloo. Si lleva a un tipo de lugar (anime → cines, gym → gimnasios), Qloo ordena esos lugares para ese gusto; si no, usa los lugares que les gustan a sus fans. Mezclando las listas salen los ${c.totalA} lugares favoritos de ${c.a} en su ciudad y los ${c.totalB} de ${c.b}.`,
@@ -58,8 +62,9 @@ const es = {
     ]),
     `Planes: un plan de uno cuenta como compartido si también está entre los ${c.deep} primeros de la lista del otro o sale de un gusto que comparten. De los de ${c.a}, ${c.onlyA} no lo son (${pct(c.onlyA, c.totalA)}%); de los de ${c.b}, ${c.onlyB} (${pct(c.onlyB, c.totalB)}%)${c.placeRisk == null ? "" : ` → planes por separado ${c.placeRisk}%`}.`,
     c.tasteRisk == null
-      ? `Riesgo de cacho = el promedio de los dos = ${c.risk}%. 0–34% bajo, 35–59% medio, 60–79% alto, 80%+ ya hay cacho.`
-      : `Riesgo de cacho = promedio de gustos (${c.tasteRisk}%) y planes (${c.placeRisk}%) = ${c.risk}%. 0–34% bajo, 35–59% medio, 60–79% alto, 80%+ ya hay cacho.`,
+      ? `Riesgo de cacho = el promedio de los dos = ${raw(c)}%${floored(c) ? `, se muestra ${c.risk}% (el mínimo)` : ""}.`
+      : `Riesgo de cacho = promedio de gustos (${c.tasteRisk}%) y planes (${c.placeRisk}%) = ${raw(c)}%${floored(c) ? `, se muestra ${c.risk}% (el mínimo)` : ""}.`,
+    `El mínimo es 5%: en Cacho-Map nadie está 100% a salvo. 5–10% pareja blindada, 11–34% bajo, 35–59% medio, 60–79% alto, 80%+ ya hay cacho.`,
     `Los gustos repetidos de una misma persona (ceviche, mariscos) cuentan como uno, cada gusto pesa por separado (ninguno más del 40%) y quitamos los lugares que Qloo le recomienda a casi cualquiera en su ciudad.`,
   ],
   compat: "planes juntos",
@@ -129,7 +134,7 @@ const es = {
     `${zone}${types ? `: ${types}` : ""}. Aquí les salen planes a los dos: a ${a} por ${ta} y a ${b} por ${tb} → irían juntos.`,
   placeWhyPair: (who: string, tw: string, other: string, to: string) => `Por esto: le sale a ${who} por ${tw}; a ${other} también le gusta ${to}, así que irían juntos.`,
   pctChain: (c: Calc) =>
-    c.tasteRisk == null ? pctPlansEs(c) : `${c.risk}% = promedio de dos partes. Gustos (${c.tasteRisk}%): ${c.pairedA} de ${c.nA} gustos de ${c.a} y ${c.pairedB} de ${c.nB} de ${c.b} tienen pareja en los del otro${c.sharedTastes ? ` (${c.sharedTastes})` : ""}. Planes (${c.placeRisk}%): ${plansEs(c)}`,
+    c.tasteRisk == null ? pctPlansEs(c) : `${floored(c) ? `El ${c.risk}% es el mínimo: en Cacho-Map nadie está 100% a salvo. Sin ese mínimo sería ${raw(c)}%, el promedio de dos partes.` : `${c.risk}% = promedio de dos partes.`} Gustos (${c.tasteRisk}%): ${c.pairedA} de ${c.nA} gustos de ${c.a} y ${c.pairedB} de ${c.nB} de ${c.b} tienen pareja en los del otro${c.sharedTastes ? ` (${c.sharedTastes})` : ""}. Planes (${c.placeRisk}%): ${plansEs(c)}`,
   breakdownTitle: (who: string, total: number) => `De dónde salen los ${total} lugares de ${who}:`,
   breakdownLine: (taste: string, n: number, shared: number, how: string) =>
     n ? `${taste}: ${n} ${n === 1 ? "lugar" : "lugares"}${shared ? ` (${shared} en común)` : ""} · ${how}` : `${taste}: no le sumó lugares a su top · ${how}`,
@@ -166,7 +171,7 @@ const en: Dict = {
   locDenied: "No location permission, pick your city.",
   nearYou: "near you",
   cachos: "Cheating risk",
-  levels: { low: "Low: you go out together", medium: "Medium: watch your Saturdays", high: "High: each on their own", cheating: "Already cheating (on plans)" },
+  levels: { armored: "Armored couple: not even a cacho can split them", low: "Low: you go out together", medium: "Medium: watch your Saturdays", high: "High: each on their own", cheating: "Already cheating (on plans)" },
   howCalcTitle: "How is it calculated?",
   howCalc: (c: Calc) => [
     `Each taste brings its own Qloo list. If it leads to a kind of place (anime → movie theaters, gym → gyms), Qloo ranks those places for that taste; otherwise it uses the places its fans like. Blending the lists gives ${c.a}'s ${c.totalA} favorite places in your city and ${c.b}'s ${c.totalB}.`,
@@ -175,8 +180,9 @@ const en: Dict = {
     ]),
     `Plans: a plan counts as shared if it's also in the top ${c.deep} of the other's list or comes from a taste you share. Of ${c.a}'s, ${c.onlyA} aren't (${pct(c.onlyA, c.totalA)}%); of ${c.b}'s, ${c.onlyB} (${pct(c.onlyB, c.totalB)}%)${c.placeRisk == null ? "" : ` → separate plans ${c.placeRisk}%`}.`,
     c.tasteRisk == null
-      ? `Cheating risk = the average of both = ${c.risk}%. 0–34% low, 35–59% medium, 60–79% high, 80%+ already cheating.`
-      : `Cheating risk = average of tastes (${c.tasteRisk}%) and plans (${c.placeRisk}%) = ${c.risk}%. 0–34% low, 35–59% medium, 60–79% high, 80%+ already cheating.`,
+      ? `Cheating risk = the average of both = ${raw(c)}%${floored(c) ? `, shown as ${c.risk}% (the minimum)` : ""}.`
+      : `Cheating risk = average of tastes (${c.tasteRisk}%) and plans (${c.placeRisk}%) = ${raw(c)}%${floored(c) ? `, shown as ${c.risk}% (the minimum)` : ""}.`,
+    `The minimum is 5%: on Cacho-Map nobody is 100% safe. 5–10% armored couple, 11–34% low, 35–59% medium, 60–79% high, 80%+ already cheating.`,
     `Repeated tastes of one person (ceviche, shellfish) count as one, each taste counts separately (none above 40%), and we drop places Qloo recommends to almost anyone in your city.`,
   ],
   compat: "plans together",
@@ -246,7 +252,7 @@ const en: Dict = {
     `${zone}${types ? `: ${types}` : ""}. Here you both get plans: ${a} from ${ta}, ${b} from ${tb} → you'd go together.`,
   placeWhyPair: (who: string, tw: string, other: string, to: string) => `Why: Qloo picks it for ${who} because of ${tw}; ${other} likes ${to} too, so you'd go together.`,
   pctChain: (c: Calc) =>
-    c.tasteRisk == null ? pctPlansEn(c) : `${c.risk}% = the average of two parts. Tastes (${c.tasteRisk}%): ${c.pairedA} of ${c.a}'s ${c.nA} tastes and ${c.pairedB} of ${c.b}'s ${c.nB} have a match in the other's${c.sharedTastes ? ` (${c.sharedTastes})` : ""}. Plans (${c.placeRisk}%): ${plansEn(c)}`,
+    c.tasteRisk == null ? pctPlansEn(c) : `${floored(c) ? `${c.risk}% is the minimum: on Cacho-Map nobody is 100% safe. Without it, it would be ${raw(c)}%, the average of two parts.` : `${c.risk}% = the average of two parts.`} Tastes (${c.tasteRisk}%): ${c.pairedA} of ${c.a}'s ${c.nA} tastes and ${c.pairedB} of ${c.b}'s ${c.nB} have a match in the other's${c.sharedTastes ? ` (${c.sharedTastes})` : ""}. Plans (${c.placeRisk}%): ${plansEn(c)}`,
   breakdownTitle: (who: string, total: number) => `Where ${who}'s ${total} places come from:`,
   breakdownLine: (taste: string, n: number, shared: number, how: string) =>
     n ? `${taste}: ${n} ${n === 1 ? "place" : "places"}${shared ? ` (${shared} shared)` : ""} · ${how}` : `${taste}: added no places to the top · ${how}`,

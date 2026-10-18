@@ -85,14 +85,16 @@ taste part = 1 − ( 0.85 × mean(paired tastes A / tastes A, paired B / tastes 
 A = top 20 blended Qloo places for person 1, B = same for person 2 (popular-for-anyone places removed)
 a place of A is shared if it's in B's top 30 OR it comes from a taste of A paired with one of B
 plan part  = mean( unshared A / |A| , unshared B / |B| )
-risk       = round( (taste part + plan part) / 2 × 100 )
-level = bajo < 35 ≤ medio < 60 ≤ alto < 80 ≤ "ya hay cacho"
+raw risk   = round( (taste part + plan part) / 2 × 100 )
+risk       = max(5, raw risk)      "el 5% es el mínimo: en Cacho-Map nadie está 100% a salvo"
+                                   (the % sentence and the panel show the raw number when floored)
+level = "pareja blindada" ≤ 10 < bajo < 35 ≤ medio < 60 ≤ alto < 80 ≤ "ya hay cacho"
 zone risk = places in the zone only one of them would go to (not shared, as above) / places in the zone
 zone kind = danger if zone risk ≥ 50%, else safe (both would go)
 tag affinity (secondary) = rescale(mean Qloo tag score, 0.50 → 0, 0.73 → 100) × min(1, tags / 40)
 ```
 
-The roast may only quote the overall %. The agent writes 3 candidates using 3 rotating few-shot examples from a curated bank (`lib/agent/examples.ts`, never ones about the couple's own tastes). A judge (`gemini-2.5-flash`, the strongest free-tier model) checks each one for makes-sense, real wordplay, punchline at the end, no contradiction and safety, rates funniness and force-ranks them. Anything failing a criterion or below 3/5 is rejected; if none passes, the agent regenerates once (time permitting).
+The roast may only quote the overall %. For a "pareja blindada" (≤ 10%) the prompt, judge context and fallback template steer to "ni el cacho los separa" / "not even a cacho can split them", citing a taste the two really share. The agent writes 3 candidates using 3 rotating few-shot examples from a curated bank (`lib/agent/examples.ts`, never ones about the couple's own tastes). A judge (`gemini-2.5-flash`, the strongest free-tier model) checks each one for makes-sense, real wordplay, punchline at the end, no contradiction and safety, rates funniness and force-ranks them. Anything failing a criterion or below 3/5 is rejected; if none passes, the agent regenerates once (time permitting).
 
 **Pronouns.** Each person picks él/ella/elle (he/she/they), neutral by default. They go into every prompt (roast, plan, zone and place copy), and `lib/agent/gender.ts` fixes "solo/sola" to the right form ("sin compañía" for neutral) and drops sentences with pronouns nobody uses.
 

@@ -12,7 +12,7 @@ const MAX_PLACE_INPUTS = 7;
 const inputKind = (e: TasteEntity, mode?: "typed" | "general"): InputKind =>
   mode === "typed" ? "typed" : e.type !== "tag" ? "title" : e.id.startsWith("urn:tag:cuisine") ? "cuisine" : "category";
 import { generateRoast, type Judged } from "../agent/roast";
-import { fallbackRoast } from "../agent/fallback";
+import { fallbackRoast, sharedPairs } from "../agent/fallback";
 import { describe } from "../agent/enrich";
 
 const AGENT_TIMEOUT_MS = 35_000;
@@ -127,7 +127,7 @@ export async function runMatch({ a, b, city, lang }: MatchInput): Promise<MatchR
     }
   } catch (e) {
     console.error("agent failed, using fallback:", (e as Error).message);
-    roast = fallbackRoast(people.a, people.b, s, lang, input.tastesA, input.tastesB);
+    roast = fallbackRoast(people.a, people.b, s, lang, input.tastesA, input.tastesB, sharedPairs(ra.found, input.tastesA, input.tastesB));
     agent = "fallback";
   }
   if (usedTemplate) agent = "fallback";
