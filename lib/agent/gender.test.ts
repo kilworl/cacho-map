@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fixGender } from "./gender";
+import { fixGender, fixTastePossessives } from "./gender";
 
 const caro = (pronoun: "m" | "f" | "n") => ({ nick: "Caro", pronoun });
 const dani = (pronoun: "m" | "f" | "n") => ({ nick: "Dani", pronoun });
@@ -29,5 +29,19 @@ describe("fixGender", () => {
     expect(fixGender("Dani está enamorada. Caro paga.", [caro("n"), dani("n")], "es")).toBe("Caro paga.");
     expect(fixGender("Dani está enamorada.", [caro("n"), dani("m")], "es")).toBe("Dani está enamorado.");
     expect(fixGender("Dani sale sin Caro, de seguro hay canción.", [caro("f"), dani("n")], "es")).toBe("Dani sale sin Caro, de seguro hay canción.");
+  });
+});
+
+describe("fixTastePossessives", () => {
+  it("rewrites wrong his/her before a taste to the owner's name", () => {
+    const ana = { nick: "Ana", pronoun: "f" as const, tastes: ["Friends", "salsa"] };
+    const leo = { nick: "Leo", pronoun: "m" as const, tastes: ["gym", "Metallica"] };
+    expect(fixTastePossessives("Her gym is not a person", [ana, leo], "en")).toBe("Leo's gym is not a person");
+    expect(fixTastePossessives("His Friends binge is the alibi", [ana, leo], "en")).toBe("Ana's Friends binge is the alibi");
+  });
+  it("leaves Spanish alone and ignores non-taste nouns", () => {
+    const leo = { nick: "Leo", pronoun: "m" as const, tastes: ["gym"] };
+    expect(fixTastePossessives("Su gym no es persona", [leo], "es")).toBe("Su gym no es persona");
+    expect(fixTastePossessives("Her plan fell apart", [leo], "en")).toBe("Her plan fell apart");
   });
 });

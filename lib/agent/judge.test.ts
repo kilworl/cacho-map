@@ -44,3 +44,21 @@ describe("model output cleanup", () => {
     expect(sanitizeRoast({ title: "Riesgo de cacho: 5% \b · El ritmo de los dos", roast: "Ana y Leo bailan salsa juntos siempre.", plan: "" }, 5, "es").title).toBe("Riesgo de cacho: 5% · El ritmo de los dos");
   });
 });
+
+describe("looser joke selection", () => {
+  it("still picks a safe joke when soft comedy criteria fail", () => {
+    const c = ["weak", "unsafe", "wrong"];
+    const { best, totals } = pickBest(
+      c,
+      [v(0, { wordplay: false, pun_is_real: false, double_meaning: "", funny: 2 }), v(1, { safe: false }), v(2, { makes_sense: false })],
+      [0, 1, 2],
+    );
+    expect(best).toBe("weak");
+    expect(totals[0]).toBeGreaterThan(0);
+    expect(totals[1]).toBe(-1);
+    expect(totals[2]).toBe(-1);
+  });
+  it("returns null only when every candidate fails the hard gate", () => {
+    expect(pickBest(["a", "b"], [v(0, { safe: false }), v(1, { hedged: true })], [0, 1]).best).toBeNull();
+  });
+});

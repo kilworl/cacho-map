@@ -8,7 +8,7 @@ import { judgePrompt, systemPrompt, userPrompt } from "./prompt";
 import { cleanLine, inLang, isHedged, sanitizeRoast, tameAdjectives } from "./sanitize";
 import { judgeModelId, modelId } from "./model";
 import { fallbackRoast, sharedPairs } from "./fallback";
-import { fixGender, type Person } from "./gender";
+import { fixGender, fixTastePossessives, type Person } from "./gender";
 import { pickAngles, pickShots } from "./examples";
 
 const Candidate = z.object({
@@ -69,28 +69,49 @@ export interface RoastOutput {
   usedTemplate: boolean;
 }
 
-/** Minimum funny score to accept a candidate that passes every criterion. */
-export const MIN_FUNNY = 3;
+/** Ideal funny score for a full-criteria pass (soft preference, not a hard gate). */
+export const MIN_FUNNY = 2;
 /** Only regenerate if the first round finished within this budget. */
 const REGEN_BUDGET_MS = 14_000;
 
-/** A candidate passes only if it meets every criterion and is at least mildly funny. */
+/**
+ * Hard gate: keep the joke only if it is safe, factual, not hedged, and makes sense.
+ * Soft comedy criteria (wordplay, pun quality, funny score) rank candidates but no longer
+ * send everything to the template fallback.
+ */
+export function isEligible(v?: Verdict): boolean {
+  return !!v && (v.facts_cited ?? []).every((f) => f.correct) && v.safe && !v.hedged && v.makes_sense;
+}
+
+/** Ideal candidate: eligible plus real wordplay / punchline quality. */
 export function passes(v?: Verdict): boolean {
-  return !!v && (v.facts_cited ?? []).every((f) => f.correct) && v.makes_sense && v.wordplay && v.pun_is_real && !v.hedged && !!v.double_meaning?.includes("/")
-    && v.punchline_at_end && v.no_contradiction && v.safe && v.funny >= MIN_FUNNY;
+  return isEligible(v) && !!v && v.wordplay && v.pun_is_real && !!v.double_meaning?.includes("/")
+    && v.punchline_at_end && v.no_contradiction && v.funny >= MIN_FUNNY;
 }
 
 /** Ranking bonus for jokes that play both people's tastes against each other (variety). */
 export const BOTH_TASTES_BONUS = 5;
 
-/** Ranking position (lower is better) used to break ties between passing candidates. */
+/**
+ * Pick the best candidate. Prefer ideal (`passes`) scores; if none pass every comedy
+ * criterion, still pick the best eligible (safe + factual) joke. Template only when
+ * every candidate is unsafe / wrong-facts / hedged / nonsense.
+ */
 export function pickBest<T>(cands: T[], verdicts: Verdict[] | null, ranking: number[] | null): { best: T | null; totals: number[] } {
   const totals = cands.map((_, i) => {
     const v = verdicts?.find((x) => x.index === i);
     if (!verdicts) return 0;
-    if (!passes(v)) return -1;
+    if (!isEligible(v)) return -1;
     const pos = ranking?.indexOf(i) ?? -1;
-    return v!.funny * 10 + (v!.uses_both_tastes ? BOTH_TASTES_BONUS : 0) + (pos < 0 ? 0 : cands.length - pos);
+    let score = (v!.funny ?? 1) * 10;
+    if (v!.wordplay) score += 8;
+    if (v!.pun_is_real) score += 8;
+    if (v!.double_meaning?.includes("/")) score += 5;
+    if (v!.punchline_at_end) score += 3;
+    if (v!.no_contradiction) score += 3;
+    if (v!.uses_both_tastes) score += BOTH_TASTES_BONUS;
+    if (pos >= 0) score += cands.length - pos;
+    return score;
   });
   const order = totals.map((t, i) => [t, i] as const).sort((x, y) => y[0] - x[0]);
   if (!verdicts) return { best: cands[0] ?? null, totals };
@@ -154,9 +175,14 @@ async function candidates(input: RoastInput, toolCalls: string[], useTools: bool
   const people = [a, b];
   const own = ownershipCtx(input);
   const rejected: Judged[] = [];
+  const tasteOwners = [
+    { nick: a.nick, pronoun: a.pronoun, tastes: tastesA },
+    { nick: b.nick, pronoun: b.pronoun, tastes: tastesB },
+  ];
+  const polish = (s: string) => fixTastePossessives(fixGender(s, people, lang), tasteOwners, lang);
   const cands = (out?.candidates ?? [])
     .map((c) => sanitizeRoast({ ...c, plan: "" }, score.risk, lang, score.zones[0]?.zone))
-    .map((c) => ({ title: sentenceCaseTitle(c.title, lang, own), roast: fixGender(c.roast, people, lang) }))
+    .map((c) => ({ title: sentenceCaseTitle(polish(c.title), lang, own), roast: polish(c.roast) }))
     .filter((c) => {
       if (c.roast.split(/\s+/).length < 6 || !inLang(c.roast, lang)) {
         rejected.push({ ...c, total: -2, dropped: true, reason: "too short, wrong language or filtered" });
@@ -179,8 +205,9 @@ async function candidates(input: RoastInput, toolCalls: string[], useTools: bool
 
 /**
  * Tool-calling agent writes 3 candidates; a judge (gemini-2.5-flash) checks explicit
- * criteria and ranks them. If none passes, we regenerate once (time permitting),
- * then fall back to the best-ranked sensible one, or the template.
+ * criteria and ranks them. Soft comedy misses still keep the best safe joke; we only
+ * regenerate (time permitting) / fall back to the template when every candidate is
+ * unsafe, hedged, nonsense, or factually wrong.
  */
 export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
   const { a, b, tastesA, tastesB, entitiesA, entitiesB, score, lang } = input;
@@ -222,7 +249,7 @@ export async function generateRoast(input: RoastInput): Promise<RoastOutput> {
       const v = j?.verdicts.find((x) => x.index === i);
       const wrong = v?.facts_cited?.find((f) => !f.correct);
       const fails = !v ? [] : [...Object.entries(v).filter(([k, x]) => x === false && k !== "index" && k !== "uses_both_tastes" && k !== "hedged").map(([k]) => k), ...(v.hedged ? ["hedged"] : []), ...(v.double_meaning?.includes("/") ? [] : ["no double meaning"])];
-      const reason = !v ? undefined : wrong ? `judge: ${wrong.fact} is ${wrong.true_owner}'s, not ${wrong.attributed_to}'s` : passes(v) ? undefined : `judge: ${fails.join(", ") || `funny ${v.funny}`}`;
+      const reason = !v ? undefined : wrong ? `judge: ${wrong.fact} is ${wrong.true_owner}'s, not ${wrong.attributed_to}'s` : passes(v) ? undefined : isEligible(v) ? `judge soft: ${fails.join(", ") || `funny ${v.funny}`}` : `judge: ${fails.join(", ") || `funny ${v.funny}`}`;
       judged.push({ title: c.title, roast: c.roast, total: pick.totals[i], dropped: pick.totals[i] < 0, reason });
     });
     best = pick.best;

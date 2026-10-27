@@ -34,16 +34,18 @@ const v = (index: number, over: Partial<Verdict> = {}): Verdict => ({
 });
 
 describe("judge selection", () => {
-  it("rejects candidates failing any criterion or below the funny threshold", () => {
+  it("rejects ideal pass when soft comedy criteria fail; funny 2 still passes", () => {
     expect(passes(v(0))).toBe(true);
     expect(passes(v(0, { wordplay: false }))).toBe(false);
     expect(passes(v(0, { no_contradiction: false }))).toBe(false);
-    expect(passes(v(0, { funny: 2 }))).toBe(false);
+    expect(passes(v(0, { funny: 2 }))).toBe(true);
+    expect(passes(v(0, { funny: 1 }))).toBe(false);
   });
-  it("picks the funniest passing candidate, ranking breaks ties", () => {
+  it("picks the funniest eligible candidate; soft misses no longer force the template", () => {
     const c = ["x", "y", "z"];
     expect(pickBest(c, [v(0, { funny: 4 }), v(1, { funny: 5, makes_sense: false }), v(2, { funny: 4 })], [2, 0, 1]).best).toBe("z");
-    expect(pickBest(c, [v(0, { funny: 2 }), v(1, { safe: false }), v(2, { wordplay: false })], [0, 1, 2]).best).toBeNull();
+    // no ideal joke: unsafe + soft-miss → keep the soft-miss instead of the template
+    expect(pickBest(c, [v(0, { safe: false }), v(1, { safe: false }), v(2, { wordplay: false, pun_is_real: false, double_meaning: "", funny: 2 })], [0, 1, 2]).best).toBe("z");
   });
   it("falls back to the first candidate if the judge is down", () => {
     expect(pickBest(["x", "y"], null, null).best).toBe("x");

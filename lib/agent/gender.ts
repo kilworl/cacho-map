@@ -77,3 +77,26 @@ export function fixGender(text: string, people: Person[], lang: Lang): string {
   }
   return out.join(" ").trim();
 }
+
+/**
+ * When a title/roast says "his/her/their X" and X is a known taste of one person,
+ * rewrite it as "Name's X" so the wrong pronoun can't stick (e.g. "Her gym" when Leo owns gym).
+ * Spanish "su/sus" is gender-neutral, so this only rewrites English possessives.
+ */
+export function fixTastePossessives(
+  text: string,
+  ownership: { nick: string; pronoun: Pronoun; tastes: string[] }[],
+  lang: Lang,
+): string {
+  if (lang !== "en" || !text.trim()) return text;
+  const entries = ownership
+    .flatMap((p) => p.tastes.filter(Boolean).map((taste) => ({ taste: taste.trim(), nick: p.nick })))
+    .filter((e) => e.taste.length >= 2)
+    .sort((a, b) => b.taste.length - a.taste.length);
+  let out = text;
+  for (const { taste, nick } of entries) {
+    const re = new RegExp(`\\b(his|her|hers|their)\\s+(${esc(taste)})\\b`, "giu");
+    out = out.replace(re, (_m, _poss: string, t: string) => `${nick}'s ${t}`);
+  }
+  return out;
+}
